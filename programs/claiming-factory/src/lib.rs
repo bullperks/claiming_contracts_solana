@@ -13,6 +13,7 @@ pub enum ErrorCode {
     MaxAdmins,
     AdminNotFound,
     InvalidAmountTransferred,
+    InvalidProof,
 }
 
 /// This event is triggered whenever a call to claim succeeds.
@@ -147,10 +148,22 @@ pub mod claiming_factory {
             &args.index.to_be_bytes()[..],
             &ctx.accounts.target_wallet.key().to_bytes(),
             &args.amount.to_be_bytes(),
-        ]
-        .concat();
-        let leaf = keccak::hash(&leaf);
-        // TODO: verify merkle proof
+        ];
+        let leaf = keccak::hashv(&leaf);
+
+        let mut computed_hash = leaf;
+        for proof in args.merkle_proof {
+            let proof = keccak::Hash::new(&proof);
+            if leaf <= proof {
+                computed_hash = keccak::hashv(&[computed_hash.as_ref(), proof.as_ref()]);
+            } else {
+                computed_hash = keccak::hashv(&[computed_hash.as_ref(), leaf.as_ref()]);
+            }
+        }
+        require!(
+            computed_hash.as_ref() == distributor.merkle_root,
+            InvalidProof
+        );
 
         let distributor_key = distributor.key();
         let seeds = &[distributor_key.as_ref(), &[distributor.vault_bump]];

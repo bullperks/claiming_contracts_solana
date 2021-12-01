@@ -17,5 +17,3 @@ no-idl = []
 [dependencies]
 anchor-lang = "0.18"
 anchor-spl = "0.18"
-
-merkle = "1.11"
