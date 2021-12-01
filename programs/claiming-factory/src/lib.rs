@@ -14,6 +14,7 @@ pub enum ErrorCode {
     AdminNotFound,
     InvalidAmountTransferred,
     InvalidProof,
+    AlreadyClaimed,
 }
 
 /// This event is triggered whenever a call to claim succeeds.
@@ -141,8 +142,9 @@ pub mod claiming_factory {
     pub fn claim(ctx: Context<Claim>, args: ClaimArgs) -> Result<()> {
         let vault = &mut ctx.accounts.vault;
         let distributor = &ctx.accounts.distributor;
+        let bitmap = &mut ctx.accounts.bitmap;
 
-        // TODO: check if already claimed
+        require!(!bitmap.is_claimed(args.index), AlreadyClaimed);
 
         let leaf = [
             &args.index.to_be_bytes()[..],
@@ -179,7 +181,7 @@ pub mod claiming_factory {
         }
         .make()?;
 
-        // TODO: set claimed
+        bitmap.set_claimed(args.index);
 
         emit!(Claimed {
             merkle_index: distributor.merkle_index,
@@ -189,6 +191,28 @@ pub mod claiming_factory {
         });
 
         Ok(())
+    }
+}
+
+#[account]
+pub struct BitMap {
+    data: [u128; 128],
+}
+
+impl BitMap {
+    fn is_claimed(&self, index: u128) -> bool {
+        let word_index = (index / 128) as usize;
+        let bit_index = index % 128;
+        let word = self.data[word_index];
+        let mask = 1 << bit_index;
+
+        word & mask == mask
+    }
+
+    fn set_claimed(&mut self, index: u128) {
+        let word_index = (index / 128) as usize;
+        let bit_index = index % 128;
+        self.data[word_index] = self.data[word_index] | (1 << bit_index);
     }
 }
 
@@ -324,13 +348,24 @@ pub struct ClaimArgs {
     index: u128,
     amount: u64,
     merkle_proof: Vec<[u8; 32]>,
+    bitmap_bump: u8,
 }
 
 #[derive(Accounts)]
+#[instruction(args: ClaimArgs)]
 pub struct Claim<'info> {
     distributor: ProgramAccount<'info, MerkleDistributor>,
     #[account(signer)]
     claimer: AccountInfo<'info>,
+    #[account(
+        mut,
+        seeds = [
+            distributor.key().as_ref(),
+            distributor.merkle_index.to_be_bytes().as_ref(),
+        ],
+        bump = args.bitmap_bump
+    )]
+    bitmap: ProgramAccount<'info, BitMap>,
 
     #[account(
         seeds = [
