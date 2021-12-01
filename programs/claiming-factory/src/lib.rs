@@ -15,6 +15,7 @@ pub enum ErrorCode {
     InvalidAmountTransferred,
     InvalidProof,
     AlreadyClaimed,
+    NotOwner,
 }
 
 /// This event is triggered whenever a call to claim succeeds.
@@ -105,6 +106,7 @@ pub mod claiming_factory {
             if let Some(admin_key) = admin_slot {
                 if *admin_key == admin {
                     *admin_slot = None;
+                    return Ok(());
                 }
             }
         }
@@ -298,6 +300,7 @@ pub struct AddAdmin<'info> {
     #[account(
         signer,
         constraint = owner.key() == distributor.owner
+            @ ErrorCode::NotOwner
     )]
     owner: AccountInfo<'info>,
 }
@@ -309,6 +312,7 @@ pub struct RemoveAdmin<'info> {
     #[account(
         signer,
         constraint = owner.key() == distributor.owner
+            @ ErrorCode::NotOwner
     )]
     owner: AccountInfo<'info>,
 }
