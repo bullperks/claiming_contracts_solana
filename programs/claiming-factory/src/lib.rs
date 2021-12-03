@@ -16,6 +16,8 @@ pub enum ErrorCode {
     InvalidProof,
     AlreadyClaimed,
     NotOwner,
+    NotAdminOrOwner,
+    ChangingPauseValueToTheSame,
 }
 
 /// This event is triggered whenever a call to claim succeeds.
@@ -45,6 +47,18 @@ pub struct TokensWithdrawn {
 pub mod claiming_factory {
     use super::*;
 
+    pub fn initialize_config(ctx: Context<InitializeConfig>, bump: u8) -> Result<()> {
+        let config = ctx.accounts.config.deref_mut();
+
+        *config = Config {
+            owner: ctx.accounts.owner.key(),
+            admins: [None; 10],
+            bump,
+        };
+
+        Ok(())
+    }
+
     pub fn initialize(ctx: Context<Initialize>, args: InitializeArgs) -> Result<()> {
         let distributor = ctx.accounts.distributor.deref_mut();
 
@@ -52,9 +66,8 @@ pub mod claiming_factory {
             merkle_index: 0,
             merkle_root: args.merkle_root,
             paused: false,
-            owner: ctx.accounts.owner.key(),
-            admins: [None; 5],
             vault_bump: args.vault_bump,
+            vault: ctx.accounts.vault.key(),
         };
 
         Ok(())
@@ -81,15 +94,27 @@ pub mod claiming_factory {
     pub fn set_paused(ctx: Context<SetPaused>, paused: bool) -> Result<()> {
         let distributor = &mut ctx.accounts.distributor;
 
+        require!(distributor.paused != paused, ChangingPauseValueToTheSame);
+
         distributor.paused = paused;
 
         Ok(())
     }
 
     pub fn add_admin(ctx: Context<AddAdmin>, admin: Pubkey) -> Result<()> {
-        let distributor = &mut ctx.accounts.distributor;
+        let config = &mut ctx.accounts.config;
 
-        for admin_slot in distributor.admins.iter_mut() {
+        for admin_slot in config.admins.iter_mut() {
+            match admin_slot {
+                // this admin have been already added
+                Some(admin_key) if *admin_key == admin => {
+                    return Ok(());
+                }
+                _ => {}
+            }
+        }
+
+        for admin_slot in config.admins.iter_mut() {
             if let None = admin_slot {
                 *admin_slot = Some(admin);
                 return Ok(());
@@ -100,9 +125,9 @@ pub mod claiming_factory {
     }
 
     pub fn remove_admin(ctx: Context<RemoveAdmin>, admin: Pubkey) -> Result<()> {
-        let distributor = &mut ctx.accounts.distributor;
+        let config = &mut ctx.accounts.config;
 
-        for admin_slot in distributor.admins.iter_mut() {
+        for admin_slot in config.admins.iter_mut() {
             if let Some(admin_key) = admin_slot {
                 if *admin_key == admin {
                     *admin_slot = None;
@@ -197,6 +222,17 @@ pub mod claiming_factory {
 }
 
 #[account]
+pub struct Config {
+    owner: Pubkey,
+    admins: [Option<Pubkey>; 10],
+    bump: u8,
+}
+
+impl Config {
+    pub const LEN: usize = std::mem::size_of::<Self>() + 8;
+}
+
+#[account]
 pub struct BitMap {
     data: [u128; 128],
 }
@@ -223,13 +259,32 @@ pub struct MerkleDistributor {
     merkle_index: u128,
     merkle_root: [u8; 32],
     paused: bool,
-    owner: Pubkey,
-    admins: [Option<Pubkey>; 5],
     vault_bump: u8,
+    vault: Pubkey,
 }
 
 impl MerkleDistributor {
-    pub const LEN: usize = std::mem::size_of::<Self>();
+    pub const LEN: usize = std::mem::size_of::<Self>() + 8;
+}
+
+#[derive(Accounts)]
+#[instruction(bump: u8)]
+pub struct InitializeConfig<'info> {
+    #[account(signer)]
+    owner: AccountInfo<'info>,
+
+    #[account(
+        init,
+        payer = owner,
+        space = Config::LEN,
+        seeds = [
+            "config".as_ref()
+        ],
+        bump = bump
+    )]
+    config: ProgramAccount<'info, Config>,
+
+    system_program: Program<'info, System>,
 }
 
 #[derive(AnchorDeserialize, AnchorSerialize)]
@@ -242,13 +297,26 @@ pub struct InitializeArgs {
 #[instruction(args: InitializeArgs)]
 pub struct Initialize<'info> {
     #[account(
+        seeds = [
+            "config".as_ref()
+        ],
+        bump = config.bump
+    )]
+    config: ProgramAccount<'info, Config>,
+    #[account(
+        signer,
+        constraint = admin_or_owner.key() == config.owner ||
+            config.admins.contains(&Some(admin_or_owner.key()))
+            @ ErrorCode::NotAdminOrOwner
+    )]
+    admin_or_owner: AccountInfo<'info>,
+
+    #[account(
         init,
-        payer = owner,
+        payer = admin_or_owner,
         space = MerkleDistributor::LEN,
     )]
     distributor: ProgramAccount<'info, MerkleDistributor>,
-    #[account(signer)]
-    owner: AccountInfo<'info>,
 
     #[account(
         seeds = [
@@ -274,9 +342,17 @@ pub struct UpdateRoot<'info> {
     #[account(mut)]
     distributor: ProgramAccount<'info, MerkleDistributor>,
     #[account(
+        seeds = [
+            "config".as_ref()
+        ],
+        bump = config.bump
+    )]
+    config: ProgramAccount<'info, Config>,
+    #[account(
         signer,
-        constraint = admin_or_owner.key() == distributor.owner ||
-            distributor.admins.contains(&Some(admin_or_owner.key()))
+        constraint = admin_or_owner.key() == config.owner ||
+            config.admins.contains(&Some(admin_or_owner.key()))
+            @ ErrorCode::NotAdminOrOwner
     )]
     admin_or_owner: AccountInfo<'info>,
 }
@@ -286,20 +362,34 @@ pub struct SetPaused<'info> {
     #[account(mut)]
     distributor: ProgramAccount<'info, MerkleDistributor>,
     #[account(
+        seeds = [
+            "config".as_ref()
+        ],
+        bump = config.bump
+    )]
+    config: ProgramAccount<'info, Config>,
+    #[account(
         signer,
-        constraint = admin_or_owner.key() == distributor.owner ||
-            distributor.admins.contains(&Some(admin_or_owner.key()))
+        constraint = admin_or_owner.key() == config.owner ||
+            config.admins.contains(&Some(admin_or_owner.key()))
+            @ ErrorCode::NotAdminOrOwner
     )]
     admin_or_owner: AccountInfo<'info>,
 }
 
 #[derive(Accounts)]
 pub struct AddAdmin<'info> {
-    #[account(mut)]
-    distributor: ProgramAccount<'info, MerkleDistributor>,
+    #[account(
+        mut,
+        seeds = [
+            "config".as_ref()
+        ],
+        bump = config.bump
+    )]
+    config: ProgramAccount<'info, Config>,
     #[account(
         signer,
-        constraint = owner.key() == distributor.owner
+        constraint = owner.key() == config.owner
             @ ErrorCode::NotOwner
     )]
     owner: AccountInfo<'info>,
@@ -307,11 +397,17 @@ pub struct AddAdmin<'info> {
 
 #[derive(Accounts)]
 pub struct RemoveAdmin<'info> {
-    #[account(mut)]
-    distributor: ProgramAccount<'info, MerkleDistributor>,
+    #[account(
+        mut,
+        seeds = [
+            "config".as_ref()
+        ],
+        bump = config.bump
+    )]
+    config: ProgramAccount<'info, Config>,
     #[account(
         signer,
-        constraint = owner.key() == distributor.owner
+        constraint = owner.key() == config.owner
             @ ErrorCode::NotOwner
     )]
     owner: AccountInfo<'info>,
@@ -321,8 +417,16 @@ pub struct RemoveAdmin<'info> {
 pub struct WithdrawTokens<'info> {
     distributor: ProgramAccount<'info, MerkleDistributor>,
     #[account(
+        seeds = [
+            "config".as_ref()
+        ],
+        bump = config.bump
+    )]
+    config: ProgramAccount<'info, Config>,
+    #[account(
         signer,
-        constraint = owner.key() == distributor.owner
+        constraint = owner.key() == config.owner
+            @ ErrorCode::NotOwner
     )]
     owner: AccountInfo<'info>,
 
