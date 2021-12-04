@@ -18,13 +18,14 @@ pub enum ErrorCode {
     NotOwner,
     NotAdminOrOwner,
     ChangingPauseValueToTheSame,
+    Paused,
 }
 
 /// This event is triggered whenever a call to claim succeeds.
 #[event]
 pub struct Claimed {
-    merkle_index: u128,
-    index: u128,
+    merkle_index: u64,
+    index: u64,
     account: Pubkey,
     amount: u64,
 }
@@ -32,7 +33,7 @@ pub struct Claimed {
 /// This event is triggered whenever the merkle root gets updated.
 #[event]
 pub struct MerkleRootUpdated {
-    merkle_index: u128,
+    merkle_index: u64,
     merkle_root: [u8; 32],
 }
 
@@ -53,6 +54,17 @@ pub mod claiming_factory {
         *config = Config {
             owner: ctx.accounts.owner.key(),
             admins: [None; 10],
+            bump,
+        };
+
+        Ok(())
+    }
+
+    pub fn init_bitmap(ctx: Context<InitBitmap>, bump: u8) -> Result<()> {
+        let bitmap = ctx.accounts.bitmap.deref_mut();
+
+        *bitmap = BitMap {
+            data: [0; 64],
             bump,
         };
 
@@ -172,27 +184,25 @@ pub mod claiming_factory {
         let bitmap = &mut ctx.accounts.bitmap;
 
         require!(!bitmap.is_claimed(args.index), AlreadyClaimed);
+        require!(!distributor.paused, Paused);
 
         let leaf = [
             &args.index.to_be_bytes()[..],
             &ctx.accounts.target_wallet.key().to_bytes(),
             &args.amount.to_be_bytes(),
         ];
-        let leaf = keccak::hashv(&leaf);
+        let leaf = keccak::hashv(&leaf).0;
 
         let mut computed_hash = leaf;
-        for proof in args.merkle_proof {
-            let proof = keccak::Hash::new(&proof);
-            if leaf <= proof {
-                computed_hash = keccak::hashv(&[computed_hash.as_ref(), proof.as_ref()]);
+        for proof_element in args.merkle_proof {
+            if computed_hash <= proof_element {
+                computed_hash = keccak::hashv(&[computed_hash.as_ref(), proof_element.as_ref()]).0;
             } else {
-                computed_hash = keccak::hashv(&[computed_hash.as_ref(), leaf.as_ref()]);
+                computed_hash = keccak::hashv(&[proof_element.as_ref(), computed_hash.as_ref()]).0;
             }
         }
-        require!(
-            computed_hash.as_ref() == distributor.merkle_root,
-            InvalidProof
-        );
+
+        require!(computed_hash == distributor.merkle_root, InvalidProof);
 
         let distributor_key = distributor.key();
         let seeds = &[distributor_key.as_ref(), &[distributor.vault_bump]];
@@ -234,29 +244,46 @@ impl Config {
 
 #[account]
 pub struct BitMap {
-    data: [u128; 128],
+    // this fits to stack nicely
+    data: [u64; 64],
+    bump: u8,
+}
+
+impl Default for BitMap {
+    fn default() -> Self {
+        Self {
+            data: [0; 64],
+            bump: Default::default(),
+        }
+    }
 }
 
 impl BitMap {
-    fn is_claimed(&self, index: u128) -> bool {
-        let word_index = (index / 128) as usize;
-        let bit_index = index % 128;
+    // 8 is for discriminator
+    pub const LEN: usize = std::mem::size_of::<Self>() + 8;
+    // this is not working due to anchor bug
+    // it fails to parse constant
+    // const ARRAY_SIZE: usize = 64;
+
+    fn is_claimed(&self, index: u64) -> bool {
+        let word_index = (index / 64) as usize;
+        let bit_index = index % 64;
         let word = self.data[word_index];
         let mask = 1 << bit_index;
 
         word & mask == mask
     }
 
-    fn set_claimed(&mut self, index: u128) {
-        let word_index = (index / 128) as usize;
-        let bit_index = index % 128;
+    fn set_claimed(&mut self, index: u64) {
+        let word_index = (index / 64) as usize;
+        let bit_index = index % 64;
         self.data[word_index] = self.data[word_index] | (1 << bit_index);
     }
 }
 
 #[account]
 pub struct MerkleDistributor {
-    merkle_index: u128,
+    merkle_index: u64,
     merkle_root: [u8; 32],
     paused: bool,
     vault_bump: u8,
@@ -265,6 +292,26 @@ pub struct MerkleDistributor {
 
 impl MerkleDistributor {
     pub const LEN: usize = std::mem::size_of::<Self>() + 8;
+}
+
+#[derive(Accounts)]
+#[instruction(bump: u8)]
+pub struct InitBitmap<'info> {
+    #[account(signer)]
+    payer: AccountInfo<'info>,
+    #[account(
+        init,
+        payer = payer,
+        seeds = [
+            distributor.key().as_ref(),
+            distributor.merkle_index.to_be_bytes().as_ref(),
+        ],
+        bump = bump,
+    )]
+    bitmap: ProgramAccount<'info, BitMap>,
+    distributor: ProgramAccount<'info, MerkleDistributor>,
+
+    system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -453,10 +500,9 @@ pub struct WithdrawTokens<'info> {
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct ClaimArgs {
-    index: u128,
+    index: u64,
     amount: u64,
     merkle_proof: Vec<[u8; 32]>,
-    bitmap_bump: u8,
 }
 
 #[derive(Accounts)]
@@ -471,7 +517,7 @@ pub struct Claim<'info> {
             distributor.key().as_ref(),
             distributor.merkle_index.to_be_bytes().as_ref(),
         ],
-        bump = args.bitmap_bump
+        bump = bitmap.bump
     )]
     bitmap: ProgramAccount<'info, BitMap>,
 
