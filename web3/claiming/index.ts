@@ -3,6 +3,7 @@ import * as serumCmn from "@project-serum/common";
 import { TokenInstructions } from '@project-serum/serum';
 
 import * as localnetIdl from './claiming_factory.json';
+import * as devnetIdl from './claiming_factory.devnet.json';
 import * as ty from './claiming_factory';
 
 const TOKEN_PROGRAM_ID = TokenInstructions.TOKEN_PROGRAM_ID;
@@ -60,6 +61,8 @@ export class Client {
     switch (this.networkName) {
       case LOCALNET:
         return new anchor.Program(localnetIdl, localnetIdl.metadata.address, this.provider);
+      case DEVNET:
+        return new anchor.Program(devnetIdl, devnetIdl.metadata.address, this.provider);
     }
   }
 
