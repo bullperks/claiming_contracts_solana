@@ -1,7 +1,25 @@
-const { keccak256 } = require('ethereumjs-util');
-const anchor = require('@project-serum/anchor');
+import { keccak256 } from 'ethereumjs-util';
+import * as anchor from '@project-serum/anchor';
 
-function getMerkleProof(data) {
+export type MerkleTreeElement = {
+  address: anchor.web3.PublicKey,
+  amount: number,
+};
+
+export type MerkleProof = {
+  proofs: number[][],
+  index: anchor.BN,
+  address: anchor.web3.PublicKey,
+  amount: anchor.BN,
+};
+
+export type MerkleData = {
+  root: number[],
+  totalTokens: number,
+  proofs: MerkleProof[],
+};
+
+export function getMerkleProof(data: MerkleTreeElement[]): MerkleData {
   let totalTokens = 0;
   let gIndex = 0;
   const elements = data.map((x) => {
@@ -9,11 +27,11 @@ function getMerkleProof(data) {
     const address = x.address;
     const amount = new anchor.BN(x.amount);
     const leaf = MerkleTree.toLeaf(index, address, amount);
-    totalTokens += amount * 1;
+    totalTokens += x.amount * 1;
     return {
       leaf,
-      index: index,
-      address: address,
+      index,
+      address,
       amount
     };
   });
@@ -39,8 +57,11 @@ function getMerkleProof(data) {
   return merkleData;
 }
 
-class MerkleTree {
-  constructor(elements) {
+export class MerkleTree {
+  elements: Buffer[];
+  layers: any[];
+
+  constructor(elements: Buffer[]) {
     // Filter empty strings
     this.elements = elements.filter(el => el);
 
@@ -53,7 +74,7 @@ class MerkleTree {
     this.layers = this.getLayers(this.elements);
   }
 
-  getLayers(elements) {
+  getLayers(elements: Buffer[]) {
     if (elements.length === 0) {
       return [['']];
     }
@@ -69,7 +90,7 @@ class MerkleTree {
     return layers;
   }
 
-  getNextLayer(elements) {
+  getNextLayer(elements: Buffer[]) {
     return elements.reduce((layer, el, idx, arr) => {
       if (idx % 2 === 0) {
         // Hash the current element with its pair element
@@ -80,7 +101,7 @@ class MerkleTree {
     }, []);
   }
 
-  static verifyProof(index, account, amount, proof, root) {
+  public static verifyProof(index, account, amount, proof, root) {
     let computedHash = MerkleTree.toLeaf(index, account, amount);
     for (const item of proof) {
       computedHash = MerkleTree.combinedHash(computedHash, item);
@@ -90,7 +111,7 @@ class MerkleTree {
     return computedHash.equals(root);
   }
 
-  static toLeaf(index, account, amount) {
+  public static toLeaf(index: anchor.BN, account: anchor.web3.PublicKey, amount: anchor.BN): Buffer {
     const buf = Buffer.concat([
       Buffer.from(index.toArray('be', 8)),
       account.toBuffer(),
@@ -169,8 +190,3 @@ class MerkleTree {
     return Buffer.concat([...args].sort(Buffer.compare));
   }
 }
-
-module.exports = {
-  MerkleTree,
-  getMerkleProof,
-};
