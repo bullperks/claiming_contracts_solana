@@ -31,25 +31,15 @@ describe('claiming-factory', () => {
   const provider = anchor.Provider.env();
   anchor.setProvider(provider);
 
-  const client = new claiming.Client(provider, claiming.LOCALNET);
+  const client = new claiming.Client(provider.wallet, claiming.LOCALNET);
 
-  const user = new anchor.web3.Account();
-  const userWallet = new serumCmn.NodeWallet(user);
-  const userProvider = new anchor.Provider(
-    provider.connection,
-    userWallet,
-    anchor.Provider.defaultOptions()
-  );
-  const userClient = new claiming.Client(userProvider, claiming.LOCALNET);
+  const user = anchor.web3.Keypair.generate();
+  const userWallet = new anchor.Wallet(user);
+  const userClient = new claiming.Client(userWallet, claiming.LOCALNET);
 
-  const admin = new anchor.web3.Account();
-  const adminWallet = new serumCmn.NodeWallet(admin);
-  const adminProvider = new anchor.Provider(
-    provider.connection,
-    adminWallet,
-    anchor.Provider.defaultOptions()
-  );
-  const adminClient = new claiming.Client(adminProvider, claiming.LOCALNET);
+  const admin = anchor.web3.Keypair.generate();
+  const adminWallet = new anchor.Wallet(admin);
+  const adminClient = new claiming.Client(adminWallet, claiming.LOCALNET);
 
   const program = anchor.workspace.ClaimingFactory as anchor.Program<ty.ClaimingFactory>;
 
@@ -174,7 +164,7 @@ describe('claiming-factory', () => {
 
     context("withdraw tokens", async function () {
       it("shouldn't allow withdraw by user", async function () {
-        const targetWallet = await serumCmn.createTokenAccount(userProvider, mint.publicKey, user.publicKey);
+        const targetWallet = await serumCmn.createTokenAccount(userClient.provider, mint.publicKey, user.publicKey);
 
         await assert.rejects(
           async () => {
@@ -188,7 +178,7 @@ describe('claiming-factory', () => {
       });
 
       it("shouldn't allow withdraw by admin", async function () {
-        const targetWallet = await serumCmn.createTokenAccount(adminProvider, mint.publicKey, admin.publicKey);
+        const targetWallet = await serumCmn.createTokenAccount(adminClient.provider, mint.publicKey, admin.publicKey);
 
         await assert.rejects(
           async () => {
@@ -458,7 +448,7 @@ describe('claiming-factory', () => {
         let updatedMerkleData = merkle.getMerkleProof(data);
 
         await client.updateRoot(this.distributor, updatedMerkleData.root, true);
-        const bitmap = await client.initBitmap(this.distributor);
+        await client.initBitmap(this.distributor);
 
         merkleElement = updatedMerkleData.proofs[25];
 
@@ -484,7 +474,7 @@ describe('claiming-factory', () => {
         let updatedMerkleData = merkle.getMerkleProof(data);
 
         await client.updateRoot(this.distributor, updatedMerkleData.root, true);
-        const firstBitmap = await client.initBitmap(this.distributor);
+        await client.initBitmap(this.distributor);
 
         merkleElement = updatedMerkleData.proofs[24];
 
@@ -495,7 +485,7 @@ describe('claiming-factory', () => {
         assert.ok(targetWalletAccount.amount.eq(secondAmount));
 
         await client.updateRoot(this.distributor, updatedMerkleData.root, true);
-        const bitmap = await client.initBitmap(this.distributor);
+        await client.initBitmap(this.distributor);
 
         await client.claim(this.distributor, merkleElement.address, merkleElement.index, merkleElement.amount, merkleElement.proofs);
 

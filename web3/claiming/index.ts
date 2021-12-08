@@ -2,8 +2,7 @@ import * as anchor from '@project-serum/anchor';
 import * as serumCmn from "@project-serum/common";
 import { TokenInstructions } from '@project-serum/serum';
 
-import * as localnetIdl from './claiming_factory.json';
-import * as devnetIdl from './claiming_factory.devnet.json';
+import * as idl from './claiming_factory.json';
 import * as ty from './claiming_factory';
 
 const TOKEN_PROGRAM_ID = TokenInstructions.TOKEN_PROGRAM_ID;
@@ -22,22 +21,11 @@ export const DEVNET = 'devnet';
 export const TESTNET = 'testnet';
 export const MAINNET = 'mainnet-beta';
 
-/* create the provider and return it to the caller */
-export async function getProvider(wallet: anchor.Wallet, networkName: NetworkName): Promise<anchor.Provider> {
-  let network: string;
-  switch (networkName) {
-    case DEVNET:
-    case TESTNET:
-    case MAINNET:
-      network = anchor.web3.clusterApiUrl(networkName);
-    case LOCALNET:
-      network = networkName;
-  }
-
-  const connection = new anchor.web3.Connection(network, opts.preflightCommitment);
-  const provider = new anchor.Provider(connection, wallet, opts);
-  return provider;
-}
+const DEVNET_PROGRAM_ADDRESS = "8kYykaz22b9r48BWzrLhNcCvCwrtKF5Ggr1Mv6ik4w8C";
+// TODO: change address to actual testnet program address
+const TESTNET_PROGRAM_ADDRESS = "8kYykaz22b9r48BWzrLhNcCvCwrtKF5Ggr1Mv6ik4w8C";
+// TODO: change address to actual mainnet program address
+const MAINNET_PROGRAM_ADDRESS = "8kYykaz22b9r48BWzrLhNcCvCwrtKF5Ggr1Mv6ik4w8C";
 
 export type CreateDistributorArgs = {
   mint: anchor.web3.PublicKey,
@@ -51,18 +39,39 @@ export class Client {
   networkName: NetworkName;
   program: anchor.Program<ty.ClaimingFactory>;
 
-  constructor(provider: anchor.Provider, networkName: NetworkName) {
-    this.provider = provider;
+  constructor(wallet: anchor.Wallet, networkName: NetworkName) {
     this.networkName = networkName;
+    this.provider = this.getProvider(wallet);
     this.program = this.initProgram();
+  }
+
+  /* create the provider and return it to the caller */
+  getProvider(wallet: anchor.Wallet): anchor.Provider {
+    let network: string;
+    switch (this.networkName) {
+      case DEVNET:
+      case TESTNET:
+      case MAINNET:
+        network = anchor.web3.clusterApiUrl(this.networkName);
+      case LOCALNET:
+        network = this.networkName;
+    }
+
+    const connection = new anchor.web3.Connection(network, opts.preflightCommitment);
+    const provider = new anchor.Provider(connection, wallet, opts);
+    return provider;
   }
 
   initProgram(): anchor.Program<ty.ClaimingFactory> {
     switch (this.networkName) {
       case LOCALNET:
-        return new anchor.Program(localnetIdl, localnetIdl.metadata.address, this.provider);
+        return new anchor.Program(idl, idl.metadata.address, this.provider);
       case DEVNET:
-        return new anchor.Program(devnetIdl, devnetIdl.metadata.address, this.provider);
+        return new anchor.Program(idl, DEVNET_PROGRAM_ADDRESS, this.provider);
+      case TESTNET:
+        return new anchor.Program(idl, TESTNET_PROGRAM_ADDRESS, this.provider);
+      case MAINNET:
+        return new anchor.Program(idl, MAINNET_PROGRAM_ADDRESS, this.provider);
     }
   }
 
