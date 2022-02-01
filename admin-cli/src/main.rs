@@ -78,6 +78,7 @@ struct Opts {
 #[derive(Debug, StructOpt)]
 enum Command {
     InitConfig {},
+    ShowConfig {},
 }
 
 fn main() -> Result<()> {
@@ -94,6 +95,8 @@ fn main() -> Result<()> {
     match opts.cmd {
         Command::InitConfig {} => {
             let (config, bump) = Pubkey::find_program_address(&["config".as_ref()], &client.id());
+            println!("Config address: {}", config);
+
             let r = client
                 .request()
                 .accounts(claiming_factory::accounts::InitializeConfig {
@@ -106,6 +109,12 @@ fn main() -> Result<()> {
                 .send()?;
 
             println!("Result:\n{}", r);
+        }
+        Command::ShowConfig {} => {
+            let (config, _bump) = Pubkey::find_program_address(&["config".as_ref()], &client.id());
+
+            let config: claiming_factory::Config = client.account(config)?;
+            println!("{:#?}", config);
         }
     }
 

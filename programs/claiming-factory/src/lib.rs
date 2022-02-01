@@ -231,6 +231,7 @@ pub mod claiming_factory {
     }
 }
 
+#[derive(Debug)]
 #[account]
 pub struct Config {
     owner: Pubkey,
