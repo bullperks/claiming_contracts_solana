@@ -35,6 +35,8 @@ anchor deploy --provider.cluster devnet # if you want to deploy on devnet
 # 8kYykaz22b9r48BWzrLhNcCvCwrtKF5Ggr1Mv6ik4w8C is the address of program already deployed on devnet
 # set some other `program-id` if you've deployed another program
 cargo run -p admin-cli -- --cluster devnet --program-id 8kYykaz22b9r48BWzrLhNcCvCwrtKF5Ggr1Mv6ik4w8C init-config
+# this command allows you to show the default config
+cargo run -p admin-cli -- --cluster devnet --program-id 8kYykaz22b9r48BWzrLhNcCvCwrtKF5Ggr1Mv6ik4w8C show-config
 ```
 
 > Now you have working development environment and deployed and initialized program on devnet.
