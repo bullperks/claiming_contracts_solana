@@ -286,6 +286,7 @@ impl BitMap {
 }
 
 #[account]
+#[derive(Debug)]
 pub struct MerkleDistributor {
     merkle_index: u64,
     merkle_root: [u8; 32],
@@ -340,8 +341,8 @@ pub struct InitializeConfig<'info> {
 
 #[derive(AnchorDeserialize, AnchorSerialize)]
 pub struct InitializeArgs {
-    vault_bump: u8,
-    merkle_root: [u8; 32],
+    pub vault_bump: u8,
+    pub merkle_root: [u8; 32],
 }
 
 #[derive(Accounts)]

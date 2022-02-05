@@ -8,7 +8,8 @@ use anchor_client::{
 };
 use anyhow::{anyhow, Result};
 
-use solana_sdk::signer::Signer;
+use serde::{Deserialize, Serialize};
+use solana_sdk::{program_pack::Pack, signature::Keypair, signer::Signer};
 use structopt::StructOpt;
 
 #[derive(Debug)]
@@ -77,10 +78,29 @@ struct Opts {
     cmd: Command,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct MerkleData {
+    data: [u8; 32],
+}
+
 #[derive(Debug, StructOpt)]
 enum Command {
     InitConfig {},
     ShowConfig {},
+    AddAdmin {
+        #[structopt(long)]
+        admin: Pubkey,
+    },
+    CreateClaiming {
+        #[structopt(long)]
+        merkle: String,
+        #[structopt(long)]
+        mint: Pubkey,
+    },
+    ShowClaiming {
+        #[structopt(long)]
+        claiming: Pubkey,
+    },
 }
 
 fn main() -> Result<()> {
@@ -102,7 +122,7 @@ fn main() -> Result<()> {
             let r = client
                 .request()
                 .accounts(claiming_factory::accounts::InitializeConfig {
-                    system_program: anchor_client::solana_sdk::system_program::id(),
+                    system_program: solana_sdk::system_program::id(),
                     owner: payer.pubkey(),
                     config,
                 })
@@ -117,6 +137,86 @@ fn main() -> Result<()> {
 
             let config: claiming_factory::Config = client.account(config)?;
             println!("{:#?}", config);
+        }
+        Command::AddAdmin { admin } => {
+            let (config, _bump) = Pubkey::find_program_address(&["config".as_ref()], &client.id());
+            println!("Config address: {}", config);
+
+            let r = client
+                .request()
+                .accounts(claiming_factory::accounts::AddAdmin {
+                    owner: payer.pubkey(),
+                    config,
+                    admin,
+                })
+                .args(claiming_factory::instruction::AddAdmin {})
+                .signer(payer.as_ref())
+                .send()?;
+
+            println!("Result:\n{}", r);
+        }
+        Command::CreateClaiming { merkle, mint } => {
+            let merkle: MerkleData = serde_json::from_str(&merkle)?;
+            println!("{:?}", merkle);
+
+            let (config, _bump) = Pubkey::find_program_address(&["config".as_ref()], &client.id());
+            println!("Config address: {}", config);
+
+            let distributor = Keypair::new();
+            println!("Distributor address: {}", distributor.pubkey());
+
+            let vault = Keypair::new();
+
+            let (vault_authority, vault_bump) =
+                Pubkey::find_program_address(&[distributor.pubkey().as_ref()], &client.id());
+
+            let rent = client
+                .rpc()
+                .get_minimum_balance_for_rent_exemption(spl_token::state::Account::LEN)?;
+
+            let create_token_account_ix = solana_sdk::system_instruction::create_account(
+                &payer.pubkey(),
+                &vault.pubkey(),
+                rent,
+                spl_token::state::Account::LEN as u64,
+                &spl_token::ID,
+            );
+
+            let init_token_account_ix = spl_token::instruction::initialize_account(
+                &spl_token::ID,
+                &vault.pubkey(),
+                &mint,
+                &vault_authority,
+            )?;
+
+            let r = client
+                .request()
+                .instruction(create_token_account_ix)
+                .instruction(init_token_account_ix)
+                .accounts(claiming_factory::accounts::Initialize {
+                    config,
+                    admin_or_owner: payer.pubkey(),
+                    distributor: distributor.pubkey(),
+                    vault_authority,
+                    vault: vault.pubkey(),
+                    system_program: solana_sdk::system_program::id(),
+                })
+                .args(claiming_factory::instruction::Initialize {
+                    args: claiming_factory::InitializeArgs {
+                        vault_bump,
+                        merkle_root: merkle.data,
+                    },
+                })
+                .signer(payer.as_ref())
+                .signer(&distributor)
+                .signer(&vault)
+                .send()?;
+
+            println!("Result:\n{}", r);
+        }
+        Command::ShowClaiming { claiming } => {
+            let claiming: claiming_factory::MerkleDistributor = client.account(claiming)?;
+            println!("{:#?}", claiming);
         }
     }
 

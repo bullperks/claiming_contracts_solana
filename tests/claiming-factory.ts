@@ -12,7 +12,7 @@ import * as ty from '../target/types/claiming_factory';
 
 const TOKEN_PROGRAM_ID = TokenInstructions.TOKEN_PROGRAM_ID;
 
-async function createMint(provider: anchor.Provider, authority?: anchor.web3.PublicKey) {
+export async function createMint(provider: anchor.Provider, authority?: anchor.web3.PublicKey) {
   if (authority === undefined) {
     authority = provider.wallet.publicKey;
   }
