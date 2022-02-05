@@ -1,6 +1,7 @@
 use std::ops::DerefMut;
 
 use anchor_lang::{
+    accounts::program_account::ProgramAccount,
     prelude::*,
     solana_program::{keccak, log::sol_log_64},
 };
@@ -113,13 +114,14 @@ pub mod claiming_factory {
         Ok(())
     }
 
-    pub fn add_admin(ctx: Context<AddAdmin>, admin: Pubkey) -> Result<()> {
+    pub fn add_admin(ctx: Context<AddAdmin>) -> Result<()> {
         let config = &mut ctx.accounts.config;
+        let admin = &ctx.accounts.admin;
 
         for admin_slot in config.admins.iter_mut() {
             match admin_slot {
                 // this admin have been already added
-                Some(admin_key) if *admin_key == admin => {
+                Some(admin_key) if *admin_key == admin.key() => {
                     return Ok(());
                 }
                 _ => {}
@@ -128,7 +130,7 @@ pub mod claiming_factory {
 
         for admin_slot in config.admins.iter_mut() {
             if let None = admin_slot {
-                *admin_slot = Some(admin);
+                *admin_slot = Some(admin.key());
                 return Ok(());
             }
         }
@@ -136,12 +138,13 @@ pub mod claiming_factory {
         Err(ErrorCode::MaxAdmins.into())
     }
 
-    pub fn remove_admin(ctx: Context<RemoveAdmin>, admin: Pubkey) -> Result<()> {
+    pub fn remove_admin(ctx: Context<RemoveAdmin>) -> Result<()> {
         let config = &mut ctx.accounts.config;
+        let admin = &ctx.accounts.admin;
 
         for admin_slot in config.admins.iter_mut() {
             if let Some(admin_key) = admin_slot {
-                if *admin_key == admin {
+                if *admin_key == admin.key() {
                     *admin_slot = None;
                     return Ok(());
                 }
@@ -231,8 +234,8 @@ pub mod claiming_factory {
     }
 }
 
-#[derive(Debug)]
 #[account]
+#[derive(Debug)]
 pub struct Config {
     owner: Pubkey,
     admins: [Option<Pubkey>; 10],
@@ -441,6 +444,7 @@ pub struct AddAdmin<'info> {
             @ ErrorCode::NotOwner
     )]
     owner: AccountInfo<'info>,
+    admin: AccountInfo<'info>,
 }
 
 #[derive(Accounts)]
@@ -459,6 +463,7 @@ pub struct RemoveAdmin<'info> {
             @ ErrorCode::NotOwner
     )]
     owner: AccountInfo<'info>,
+    admin: AccountInfo<'info>,
 }
 
 #[derive(Accounts)]

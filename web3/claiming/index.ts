@@ -150,11 +150,11 @@ export class Client {
   async addAdmin(admin: anchor.web3.PublicKey) {
     const [config, _bump] = await this.findConfigAddress();
     await this.program.rpc.addAdmin(
-      admin,
       {
         accounts: {
           config,
           owner: this.provider.wallet.publicKey,
+          admin,
         }
       }
     );
@@ -163,11 +163,11 @@ export class Client {
   async removeAdmin(admin: anchor.web3.PublicKey) {
     const [config, _bump] = await this.findConfigAddress();
     await this.program.rpc.removeAdmin(
-      admin,
       {
         accounts: {
           config,
           owner: this.provider.wallet.publicKey,
+          admin,
         },
       },
     );

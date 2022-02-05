@@ -1,5 +1,5 @@
 export type ClaimingFactory = {
-  "version": "0.0.0",
+  "version": "0.1.0",
   "name": "claiming_factory",
   "instructions": [
     {
@@ -168,14 +168,14 @@ export type ClaimingFactory = {
           "name": "owner",
           "isMut": false,
           "isSigner": true
-        }
-      ],
-      "args": [
+        },
         {
           "name": "admin",
-          "type": "publicKey"
+          "isMut": false,
+          "isSigner": false
         }
-      ]
+      ],
+      "args": []
     },
     {
       "name": "removeAdmin",
@@ -189,14 +189,14 @@ export type ClaimingFactory = {
           "name": "owner",
           "isMut": false,
           "isSigner": true
-        }
-      ],
-      "args": [
+        },
         {
           "name": "admin",
-          "type": "publicKey"
+          "isMut": false,
+          "isSigner": false
         }
-      ]
+      ],
+      "args": []
     },
     {
       "name": "withdrawTokens",
@@ -511,46 +511,46 @@ export type ClaimingFactory = {
   ],
   "errors": [
     {
-      "code": 300,
+      "code": 6000,
       "name": "MaxAdmins"
     },
     {
-      "code": 301,
+      "code": 6001,
       "name": "AdminNotFound"
     },
     {
-      "code": 302,
+      "code": 6002,
       "name": "InvalidAmountTransferred"
     },
     {
-      "code": 303,
+      "code": 6003,
       "name": "InvalidProof"
     },
     {
-      "code": 304,
+      "code": 6004,
       "name": "AlreadyClaimed"
     },
     {
-      "code": 305,
+      "code": 6005,
       "name": "NotOwner"
     },
     {
-      "code": 306,
+      "code": 6006,
       "name": "NotAdminOrOwner"
     },
     {
-      "code": 307,
+      "code": 6007,
       "name": "ChangingPauseValueToTheSame"
     },
     {
-      "code": 308,
+      "code": 6008,
       "name": "Paused"
     }
   ]
 };
 
 export const IDL: ClaimingFactory = {
-  "version": "0.0.0",
+  "version": "0.1.0",
   "name": "claiming_factory",
   "instructions": [
     {
@@ -719,14 +719,14 @@ export const IDL: ClaimingFactory = {
           "name": "owner",
           "isMut": false,
           "isSigner": true
-        }
-      ],
-      "args": [
+        },
         {
           "name": "admin",
-          "type": "publicKey"
+          "isMut": false,
+          "isSigner": false
         }
-      ]
+      ],
+      "args": []
     },
     {
       "name": "removeAdmin",
@@ -740,14 +740,14 @@ export const IDL: ClaimingFactory = {
           "name": "owner",
           "isMut": false,
           "isSigner": true
-        }
-      ],
-      "args": [
+        },
         {
           "name": "admin",
-          "type": "publicKey"
+          "isMut": false,
+          "isSigner": false
         }
-      ]
+      ],
+      "args": []
     },
     {
       "name": "withdrawTokens",
@@ -1062,39 +1062,39 @@ export const IDL: ClaimingFactory = {
   ],
   "errors": [
     {
-      "code": 300,
+      "code": 6000,
       "name": "MaxAdmins"
     },
     {
-      "code": 301,
+      "code": 6001,
       "name": "AdminNotFound"
     },
     {
-      "code": 302,
+      "code": 6002,
       "name": "InvalidAmountTransferred"
     },
     {
-      "code": 303,
+      "code": 6003,
       "name": "InvalidProof"
     },
     {
-      "code": 304,
+      "code": 6004,
       "name": "AlreadyClaimed"
     },
     {
-      "code": 305,
+      "code": 6005,
       "name": "NotOwner"
     },
     {
-      "code": 306,
+      "code": 6006,
       "name": "NotAdminOrOwner"
     },
     {
-      "code": 307,
+      "code": 6007,
       "name": "ChangingPauseValueToTheSame"
     },
     {
-      "code": 308,
+      "code": 6008,
       "name": "Paused"
     }
   ]

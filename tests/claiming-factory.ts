@@ -79,7 +79,7 @@ describe('claiming-factory', () => {
           await userClient.addAdmin(admin.publicKey);
         },
         (err) => {
-          assert.equal(err.code, 305);
+          assert.equal(err.code, 6005);
           return true;
         }
       );
@@ -99,7 +99,7 @@ describe('claiming-factory', () => {
           await userClient.removeAdmin(admin.publicKey);
         },
         (err) => {
-          assert.equal(err.code, 305);
+          assert.equal(err.code, 6005);
           return true;
         }
       );
@@ -121,7 +121,7 @@ describe('claiming-factory', () => {
           await userClient.createDistributor(mint.publicKey, merkleData.root);
         },
         (err) => {
-          assert.equal(err.code, 306);
+          assert.equal(err.code, 6006);
           return true;
         }
       );
@@ -171,7 +171,7 @@ describe('claiming-factory', () => {
             await userClient.withdrawTokens(new anchor.BN(100), this.distributor, targetWallet);
           },
           (err) => {
-            assert.equal(err.code, 305);
+            assert.equal(err.code, 6005);
             return true;
           }
         );
@@ -185,7 +185,7 @@ describe('claiming-factory', () => {
             await adminClient.withdrawTokens(new anchor.BN(100), this.distributor, targetWallet);
           },
           (err) => {
-            assert.equal(err.code, 305);
+            assert.equal(err.code, 6005);
             return true;
           }
         );
@@ -209,7 +209,7 @@ describe('claiming-factory', () => {
             await userClient.updateRoot(this.distributor, UPDATED_ROOT, false);
           },
           (err) => {
-            assert.equal(err.code, 306);
+            assert.equal(err.code, 6006);
             return true;
           }
         );
@@ -257,7 +257,7 @@ describe('claiming-factory', () => {
             await userClient.pause(this.distributor);
           },
           (err) => {
-            assert.equal(err.code, 306);
+            assert.equal(err.code, 6006);
             return true;
           }
         );
@@ -275,7 +275,7 @@ describe('claiming-factory', () => {
             await client.pause(this.distributor);
           },
           (err) => {
-            assert.equal(err.code, 307);
+            assert.equal(err.code, 6007);
             return true;
           }
         );
@@ -327,7 +327,7 @@ describe('claiming-factory', () => {
             await client.unpause(this.distributor);
           },
           (err) => {
-            assert.equal(err.code, 307);
+            assert.equal(err.code, 6007);
             return true;
           }
         );
@@ -396,7 +396,7 @@ describe('claiming-factory', () => {
             await client.claim(this.distributor, merkleElement.address, merkleElement.index, merkleElement.amount, merkleElement.proofs);
           },
           (err) => {
-            assert.equal(err.code, 308);
+            assert.equal(err.code, 6008);
             return true;
           }
         )
@@ -410,7 +410,7 @@ describe('claiming-factory', () => {
             await client.claim(this.distributor, merkleElement.address, merkleElement.index, merkleElement.amount, merkleData.proofs[29].proofs);
           },
           (err) => {
-            assert.equal(err.code, 303);
+            assert.equal(err.code, 6003);
             return true;
           }
         )
@@ -426,7 +426,7 @@ describe('claiming-factory', () => {
             await client.claim(this.distributor, merkleElement.address, merkleElement.index, merkleElement.amount, merkleElement.proofs);
           },
           (err) => {
-            assert.equal(err.code, 304);
+            assert.equal(err.code, 6004);
             return true;
           }
         );
