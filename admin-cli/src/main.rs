@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use anchor_client::{
     solana_sdk::{
         commitment_config::CommitmentConfig, pubkey::Pubkey, signature::read_keypair_file,
@@ -86,10 +88,10 @@ fn main() -> Result<()> {
 
     let payer = read_keypair_file(opts.payer.as_ref())
         .map_err(|err| anyhow!("failed to read keypair: {}", err))?;
-    let payer_copy = read_keypair_file(opts.payer.as_ref())
-        .map_err(|err| anyhow!("failed to read keypair: {}", err))?;
+    let payer = Rc::new(payer);
 
-    let client = Client::new_with_options(opts.cluster, payer, CommitmentConfig::processed());
+    let client =
+        Client::new_with_options(opts.cluster, payer.clone(), CommitmentConfig::processed());
     let client = client.program(opts.program_id);
 
     match opts.cmd {
@@ -101,11 +103,11 @@ fn main() -> Result<()> {
                 .request()
                 .accounts(claiming_factory::accounts::InitializeConfig {
                     system_program: anchor_client::solana_sdk::system_program::id(),
-                    owner: payer_copy.pubkey(),
+                    owner: payer.pubkey(),
                     config,
                 })
                 .args(claiming_factory::instruction::InitializeConfig { bump })
-                .signer(&payer_copy)
+                .signer(payer.as_ref())
                 .send()?;
 
             println!("Result:\n{}", r);
