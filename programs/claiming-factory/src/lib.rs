@@ -1,7 +1,6 @@
 use std::ops::DerefMut;
 
 use anchor_lang::{
-    accounts::program_account::ProgramAccount,
     prelude::*,
     solana_program::{keccak, log::sol_log_64},
 };
@@ -305,8 +304,8 @@ pub struct InitBitmap<'info> {
         ],
         bump,
     )]
-    bitmap: ProgramAccount<'info, BitMap>,
-    distributor: ProgramAccount<'info, MerkleDistributor>,
+    bitmap: Account<'info, BitMap>,
+    distributor: Account<'info, MerkleDistributor>,
 
     system_program: Program<'info, System>,
 }
@@ -326,7 +325,7 @@ pub struct InitializeConfig<'info> {
         ],
         bump,
     )]
-    config: ProgramAccount<'info, Config>,
+    config: Account<'info, Config>,
 
     system_program: Program<'info, System>,
 }
@@ -346,7 +345,7 @@ pub struct Initialize<'info> {
         ],
         bump
     )]
-    config: ProgramAccount<'info, Config>,
+    config: Account<'info, Config>,
     #[account(
         mut,
         constraint = admin_or_owner.key() == config.owner ||
@@ -360,7 +359,7 @@ pub struct Initialize<'info> {
         payer = admin_or_owner,
         space = MerkleDistributor::LEN,
     )]
-    distributor: ProgramAccount<'info, MerkleDistributor>,
+    distributor: Account<'info, MerkleDistributor>,
 
     /// CHECK:
     #[account(
@@ -385,14 +384,14 @@ pub struct UpdateRootArgs {
 #[derive(Accounts)]
 pub struct UpdateRoot<'info> {
     #[account(mut)]
-    distributor: ProgramAccount<'info, MerkleDistributor>,
+    distributor: Account<'info, MerkleDistributor>,
     #[account(
         seeds = [
             "config".as_ref()
         ],
         bump = config.bump
     )]
-    config: ProgramAccount<'info, Config>,
+    config: Account<'info, Config>,
     #[account(
         constraint = admin_or_owner.key() == config.owner ||
             config.admins.contains(&Some(admin_or_owner.key()))
@@ -404,14 +403,14 @@ pub struct UpdateRoot<'info> {
 #[derive(Accounts)]
 pub struct SetPaused<'info> {
     #[account(mut)]
-    distributor: ProgramAccount<'info, MerkleDistributor>,
+    distributor: Account<'info, MerkleDistributor>,
     #[account(
         seeds = [
             "config".as_ref()
         ],
         bump = config.bump
     )]
-    config: ProgramAccount<'info, Config>,
+    config: Account<'info, Config>,
     #[account(
         constraint = admin_or_owner.key() == config.owner ||
             config.admins.contains(&Some(admin_or_owner.key()))
@@ -429,7 +428,7 @@ pub struct AddAdmin<'info> {
         ],
         bump = config.bump
     )]
-    config: ProgramAccount<'info, Config>,
+    config: Account<'info, Config>,
     #[account(
         constraint = owner.key() == config.owner
             @ ErrorCode::NotOwner
@@ -448,7 +447,7 @@ pub struct RemoveAdmin<'info> {
         ],
         bump = config.bump
     )]
-    config: ProgramAccount<'info, Config>,
+    config: Account<'info, Config>,
     #[account(
         constraint = owner.key() == config.owner
             @ ErrorCode::NotOwner
@@ -460,14 +459,14 @@ pub struct RemoveAdmin<'info> {
 
 #[derive(Accounts)]
 pub struct WithdrawTokens<'info> {
-    distributor: ProgramAccount<'info, MerkleDistributor>,
+    distributor: Account<'info, MerkleDistributor>,
     #[account(
         seeds = [
             "config".as_ref()
         ],
         bump = config.bump
     )]
-    config: ProgramAccount<'info, Config>,
+    config: Account<'info, Config>,
     #[account(
         constraint = owner.key() == config.owner
             @ ErrorCode::NotOwner
@@ -506,7 +505,7 @@ pub struct ClaimArgs {
 #[derive(Accounts)]
 #[instruction(args: ClaimArgs)]
 pub struct Claim<'info> {
-    distributor: ProgramAccount<'info, MerkleDistributor>,
+    distributor: Account<'info, MerkleDistributor>,
     claimer: Signer<'info>,
     #[account(
         mut,
@@ -516,7 +515,7 @@ pub struct Claim<'info> {
         ],
         bump = bitmap.bump
     )]
-    bitmap: ProgramAccount<'info, BitMap>,
+    bitmap: Box<Account<'info, BitMap>>,
 
     /// CHECK:
     #[account(
