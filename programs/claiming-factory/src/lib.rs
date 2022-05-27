@@ -9,7 +9,7 @@ use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
-#[error]
+#[error_code]
 pub enum ErrorCode {
     MaxAdmins,
     AdminNotFound,
@@ -253,15 +253,6 @@ pub struct BitMap {
     bump: u8,
 }
 
-impl Default for BitMap {
-    fn default() -> Self {
-        Self {
-            data: [0; 64],
-            bump: Default::default(),
-        }
-    }
-}
-
 impl BitMap {
     // 8 is for discriminator
     pub const LEN: usize = std::mem::size_of::<Self>() + 8;
@@ -302,16 +293,17 @@ impl MerkleDistributor {
 #[derive(Accounts)]
 #[instruction(bump: u8)]
 pub struct InitBitmap<'info> {
-    #[account(signer)]
-    payer: AccountInfo<'info>,
+    #[account(mut)]
+    payer: Signer<'info>,
     #[account(
         init,
         payer = payer,
+        space = BitMap::LEN,
         seeds = [
             distributor.key().as_ref(),
             distributor.merkle_index.to_be_bytes().as_ref(),
         ],
-        bump = bump,
+        bump,
     )]
     bitmap: ProgramAccount<'info, BitMap>,
     distributor: ProgramAccount<'info, MerkleDistributor>,
@@ -322,8 +314,8 @@ pub struct InitBitmap<'info> {
 #[derive(Accounts)]
 #[instruction(bump: u8)]
 pub struct InitializeConfig<'info> {
-    #[account(signer)]
-    owner: AccountInfo<'info>,
+    #[account(mut)]
+    owner: Signer<'info>,
 
     #[account(
         init,
@@ -332,7 +324,7 @@ pub struct InitializeConfig<'info> {
         seeds = [
             "config".as_ref()
         ],
-        bump = bump
+        bump,
     )]
     config: ProgramAccount<'info, Config>,
 
@@ -352,16 +344,16 @@ pub struct Initialize<'info> {
         seeds = [
             "config".as_ref()
         ],
-        bump = config.bump
+        bump
     )]
     config: ProgramAccount<'info, Config>,
     #[account(
-        signer,
+        mut,
         constraint = admin_or_owner.key() == config.owner ||
             config.admins.contains(&Some(admin_or_owner.key()))
             @ ErrorCode::NotAdminOrOwner
     )]
-    admin_or_owner: AccountInfo<'info>,
+    admin_or_owner: Signer<'info>,
 
     #[account(
         init,
@@ -370,6 +362,7 @@ pub struct Initialize<'info> {
     )]
     distributor: ProgramAccount<'info, MerkleDistributor>,
 
+    /// CHECK:
     #[account(
         seeds = [
             distributor.key().as_ref()
@@ -401,12 +394,11 @@ pub struct UpdateRoot<'info> {
     )]
     config: ProgramAccount<'info, Config>,
     #[account(
-        signer,
         constraint = admin_or_owner.key() == config.owner ||
             config.admins.contains(&Some(admin_or_owner.key()))
             @ ErrorCode::NotAdminOrOwner
     )]
-    admin_or_owner: AccountInfo<'info>,
+    admin_or_owner: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -421,12 +413,11 @@ pub struct SetPaused<'info> {
     )]
     config: ProgramAccount<'info, Config>,
     #[account(
-        signer,
         constraint = admin_or_owner.key() == config.owner ||
             config.admins.contains(&Some(admin_or_owner.key()))
             @ ErrorCode::NotAdminOrOwner
     )]
-    admin_or_owner: AccountInfo<'info>,
+    admin_or_owner: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -440,11 +431,11 @@ pub struct AddAdmin<'info> {
     )]
     config: ProgramAccount<'info, Config>,
     #[account(
-        signer,
         constraint = owner.key() == config.owner
             @ ErrorCode::NotOwner
     )]
-    owner: AccountInfo<'info>,
+    owner: Signer<'info>,
+    /// CHECK:
     admin: AccountInfo<'info>,
 }
 
@@ -459,11 +450,11 @@ pub struct RemoveAdmin<'info> {
     )]
     config: ProgramAccount<'info, Config>,
     #[account(
-        signer,
         constraint = owner.key() == config.owner
             @ ErrorCode::NotOwner
     )]
-    owner: AccountInfo<'info>,
+    owner: Signer<'info>,
+    /// CHECK:
     admin: AccountInfo<'info>,
 }
 
@@ -478,12 +469,12 @@ pub struct WithdrawTokens<'info> {
     )]
     config: ProgramAccount<'info, Config>,
     #[account(
-        signer,
         constraint = owner.key() == config.owner
             @ ErrorCode::NotOwner
     )]
-    owner: AccountInfo<'info>,
+    owner: Signer<'info>,
 
+    /// CHECK:
     #[account(
         seeds = [
             distributor.key().as_ref()
@@ -516,8 +507,7 @@ pub struct ClaimArgs {
 #[instruction(args: ClaimArgs)]
 pub struct Claim<'info> {
     distributor: ProgramAccount<'info, MerkleDistributor>,
-    #[account(signer)]
-    claimer: AccountInfo<'info>,
+    claimer: Signer<'info>,
     #[account(
         mut,
         seeds = [
@@ -528,6 +518,7 @@ pub struct Claim<'info> {
     )]
     bitmap: ProgramAccount<'info, BitMap>,
 
+    /// CHECK:
     #[account(
         seeds = [
             distributor.key().as_ref()

@@ -15,5 +15,5 @@ no-entrypoint = []
 no-idl = []
 
 [dependencies]
-anchor-lang = "0.20"
-anchor-spl = "0.20"
+anchor-lang = "0.24"
+anchor-spl = "0.24"
