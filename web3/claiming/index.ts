@@ -21,11 +21,12 @@ export const DEVNET = 'devnet';
 export const TESTNET = 'testnet';
 export const MAINNET = 'mainnet-beta';
 
-const DEVNET_PROGRAM_ADDRESS = "8kYykaz22b9r48BWzrLhNcCvCwrtKF5Ggr1Mv6ik4w8C";
+const LOCALNET_PROGRAM_ID = "3yELWiEQynmnXAavxAuQC9RDA4VoVkJeZSvX5a6P4Vvs";
+const DEVNET_PROGRAM_ID = "3yELWiEQynmnXAavxAuQC9RDA4VoVkJeZSvX5a6P4Vvs";
 // TODO: change address to actual testnet program address
-const TESTNET_PROGRAM_ADDRESS = "8kYykaz22b9r48BWzrLhNcCvCwrtKF5Ggr1Mv6ik4w8C";
+const TESTNET_PROGRAM_ID = "3yELWiEQynmnXAavxAuQC9RDA4VoVkJeZSvX5a6P4Vvs";
 // TODO: change address to actual mainnet program address
-const MAINNET_PROGRAM_ADDRESS = "8kYykaz22b9r48BWzrLhNcCvCwrtKF5Ggr1Mv6ik4w8C";
+const MAINNET_PROGRAM_ID = "3yELWiEQynmnXAavxAuQC9RDA4VoVkJeZSvX5a6P4Vvs";
 
 export type CreateDistributorArgs = {
   mint: anchor.web3.PublicKey,
@@ -65,13 +66,13 @@ export class Client {
   initProgram(): anchor.Program<ty.ClaimingFactory> {
     switch (this.networkName) {
       case LOCALNET:
-        return new anchor.Program(idl, idl.metadata.address, this.provider);
+        return new anchor.Program(idl, LOCALNET_PROGRAM_ID, this.provider);
       case DEVNET:
-        return new anchor.Program(idl, DEVNET_PROGRAM_ADDRESS, this.provider);
+        return new anchor.Program(idl, DEVNET_PROGRAM_ID, this.provider);
       case TESTNET:
-        return new anchor.Program(idl, TESTNET_PROGRAM_ADDRESS, this.provider);
+        return new anchor.Program(idl, TESTNET_PROGRAM_ID, this.provider);
       case MAINNET:
-        return new anchor.Program(idl, MAINNET_PROGRAM_ADDRESS, this.provider);
+        return new anchor.Program(idl, MAINNET_PROGRAM_ID, this.provider);
     }
   }
 
