@@ -7,43 +7,12 @@ export type ClaimingFactory = {
       "accounts": [
         {
           "name": "owner",
-          "isMut": false,
+          "isMut": true,
           "isSigner": true
         },
         {
           "name": "config",
           "isMut": true,
-          "isSigner": false
-        },
-        {
-          "name": "systemProgram",
-          "isMut": false,
-          "isSigner": false
-        }
-      ],
-      "args": [
-        {
-          "name": "bump",
-          "type": "u8"
-        }
-      ]
-    },
-    {
-      "name": "initBitmap",
-      "accounts": [
-        {
-          "name": "payer",
-          "isMut": false,
-          "isSigner": true
-        },
-        {
-          "name": "bitmap",
-          "isMut": true,
-          "isSigner": false
-        },
-        {
-          "name": "distributor",
-          "isMut": false,
           "isSigner": false
         },
         {
@@ -69,7 +38,7 @@ export type ClaimingFactory = {
         },
         {
           "name": "adminOrOwner",
-          "isMut": false,
+          "isMut": true,
           "isSigner": true
         },
         {
@@ -99,6 +68,42 @@ export type ClaimingFactory = {
           "type": {
             "defined": "InitializeArgs"
           }
+        }
+      ]
+    },
+    {
+      "name": "initUserDetails",
+      "accounts": [
+        {
+          "name": "payer",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "user",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "userDetails",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "distributor",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "bump",
+          "type": "u8"
         }
       ]
     },
@@ -253,12 +258,12 @@ export type ClaimingFactory = {
           "isSigner": false
         },
         {
-          "name": "claimer",
+          "name": "user",
           "isMut": false,
           "isSigner": true
         },
         {
-          "name": "bitmap",
+          "name": "userDetails",
           "isMut": true,
           "isSigner": false
         },
@@ -279,6 +284,11 @@ export type ClaimingFactory = {
         },
         {
           "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "clock",
           "isMut": false,
           "isSigner": false
         }
@@ -322,18 +332,17 @@ export type ClaimingFactory = {
       }
     },
     {
-      "name": "bitMap",
+      "name": "userDetails",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "data",
-            "type": {
-              "array": [
-                "u64",
-                64
-              ]
-            }
+            "name": "lastClaimedAtTs",
+            "type": "u64"
+          },
+          {
+            "name": "claimedAmount",
+            "type": "u64"
           },
           {
             "name": "bump",
@@ -371,12 +380,58 @@ export type ClaimingFactory = {
           {
             "name": "vault",
             "type": "publicKey"
+          },
+          {
+            "name": "vesting",
+            "type": {
+              "defined": "Vesting"
+            }
           }
         ]
       }
     }
   ],
   "types": [
+    {
+      "name": "Period",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "tokenPercentage",
+            "type": "u64"
+          },
+          {
+            "name": "startTs",
+            "type": "u64"
+          },
+          {
+            "name": "intervalSec",
+            "type": "u64"
+          },
+          {
+            "name": "times",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Vesting",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "schedule",
+            "type": {
+              "vec": {
+                "defined": "Period"
+              }
+            }
+          }
+        ]
+      }
+    },
     {
       "name": "InitializeArgs",
       "type": {
@@ -393,6 +448,14 @@ export type ClaimingFactory = {
                 "u8",
                 32
               ]
+            }
+          },
+          {
+            "name": "schedule",
+            "type": {
+              "vec": {
+                "defined": "Period"
+              }
             }
           }
         ]
@@ -545,6 +608,26 @@ export type ClaimingFactory = {
     {
       "code": 6008,
       "name": "Paused"
+    },
+    {
+      "code": 6009,
+      "name": "EmptySchedule"
+    },
+    {
+      "code": 6010,
+      "name": "InvalidScheduleOrder"
+    },
+    {
+      "code": 6011,
+      "name": "PercentageDoesntCoverAllTokens"
+    },
+    {
+      "code": 6012,
+      "name": "EmptyPeriod"
+    },
+    {
+      "code": 6013,
+      "name": "IntegerOverflow"
     }
   ]
 };
@@ -558,43 +641,12 @@ export const IDL: ClaimingFactory = {
       "accounts": [
         {
           "name": "owner",
-          "isMut": false,
+          "isMut": true,
           "isSigner": true
         },
         {
           "name": "config",
           "isMut": true,
-          "isSigner": false
-        },
-        {
-          "name": "systemProgram",
-          "isMut": false,
-          "isSigner": false
-        }
-      ],
-      "args": [
-        {
-          "name": "bump",
-          "type": "u8"
-        }
-      ]
-    },
-    {
-      "name": "initBitmap",
-      "accounts": [
-        {
-          "name": "payer",
-          "isMut": false,
-          "isSigner": true
-        },
-        {
-          "name": "bitmap",
-          "isMut": true,
-          "isSigner": false
-        },
-        {
-          "name": "distributor",
-          "isMut": false,
           "isSigner": false
         },
         {
@@ -620,7 +672,7 @@ export const IDL: ClaimingFactory = {
         },
         {
           "name": "adminOrOwner",
-          "isMut": false,
+          "isMut": true,
           "isSigner": true
         },
         {
@@ -650,6 +702,42 @@ export const IDL: ClaimingFactory = {
           "type": {
             "defined": "InitializeArgs"
           }
+        }
+      ]
+    },
+    {
+      "name": "initUserDetails",
+      "accounts": [
+        {
+          "name": "payer",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "user",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "userDetails",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "distributor",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "bump",
+          "type": "u8"
         }
       ]
     },
@@ -804,12 +892,12 @@ export const IDL: ClaimingFactory = {
           "isSigner": false
         },
         {
-          "name": "claimer",
+          "name": "user",
           "isMut": false,
           "isSigner": true
         },
         {
-          "name": "bitmap",
+          "name": "userDetails",
           "isMut": true,
           "isSigner": false
         },
@@ -830,6 +918,11 @@ export const IDL: ClaimingFactory = {
         },
         {
           "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "clock",
           "isMut": false,
           "isSigner": false
         }
@@ -873,18 +966,17 @@ export const IDL: ClaimingFactory = {
       }
     },
     {
-      "name": "bitMap",
+      "name": "userDetails",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "data",
-            "type": {
-              "array": [
-                "u64",
-                64
-              ]
-            }
+            "name": "lastClaimedAtTs",
+            "type": "u64"
+          },
+          {
+            "name": "claimedAmount",
+            "type": "u64"
           },
           {
             "name": "bump",
@@ -922,12 +1014,58 @@ export const IDL: ClaimingFactory = {
           {
             "name": "vault",
             "type": "publicKey"
+          },
+          {
+            "name": "vesting",
+            "type": {
+              "defined": "Vesting"
+            }
           }
         ]
       }
     }
   ],
   "types": [
+    {
+      "name": "Period",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "tokenPercentage",
+            "type": "u64"
+          },
+          {
+            "name": "startTs",
+            "type": "u64"
+          },
+          {
+            "name": "intervalSec",
+            "type": "u64"
+          },
+          {
+            "name": "times",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Vesting",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "schedule",
+            "type": {
+              "vec": {
+                "defined": "Period"
+              }
+            }
+          }
+        ]
+      }
+    },
     {
       "name": "InitializeArgs",
       "type": {
@@ -944,6 +1082,14 @@ export const IDL: ClaimingFactory = {
                 "u8",
                 32
               ]
+            }
+          },
+          {
+            "name": "schedule",
+            "type": {
+              "vec": {
+                "defined": "Period"
+              }
             }
           }
         ]
@@ -1096,6 +1242,26 @@ export const IDL: ClaimingFactory = {
     {
       "code": 6008,
       "name": "Paused"
+    },
+    {
+      "code": 6009,
+      "name": "EmptySchedule"
+    },
+    {
+      "code": 6010,
+      "name": "InvalidScheduleOrder"
+    },
+    {
+      "code": 6011,
+      "name": "PercentageDoesntCoverAllTokens"
+    },
+    {
+      "code": 6012,
+      "name": "EmptyPeriod"
+    },
+    {
+      "code": 6013,
+      "name": "IntegerOverflow"
     }
   ]
 };

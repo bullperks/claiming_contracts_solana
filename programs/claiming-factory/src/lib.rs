@@ -6,7 +6,7 @@ use anchor_lang::{
 };
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
-declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
+declare_id!("3yELWiEQynmnXAavxAuQC9RDA4VoVkJeZSvX5a6P4Vvs");
 
 #[error_code]
 pub enum ErrorCode {
@@ -19,6 +19,11 @@ pub enum ErrorCode {
     NotAdminOrOwner,
     ChangingPauseValueToTheSame,
     Paused,
+    EmptySchedule,
+    InvalidScheduleOrder,
+    PercentageDoesntCoverAllTokens,
+    EmptyPeriod,
+    IntegerOverflow,
 }
 
 /// This event is triggered whenever a call to claim succeeds.
@@ -60,17 +65,6 @@ pub mod claiming_factory {
         Ok(())
     }
 
-    pub fn init_bitmap(ctx: Context<InitBitmap>, bump: u8) -> Result<()> {
-        let bitmap = ctx.accounts.bitmap.deref_mut();
-
-        *bitmap = BitMap {
-            data: [0; 64],
-            bump,
-        };
-
-        Ok(())
-    }
-
     pub fn initialize(ctx: Context<Initialize>, args: InitializeArgs) -> Result<()> {
         let distributor = ctx.accounts.distributor.deref_mut();
 
@@ -80,16 +74,36 @@ pub mod claiming_factory {
             paused: false,
             vault_bump: args.vault_bump,
             vault: ctx.accounts.vault.key(),
+            // schedule should pass validation first
+            vesting: Vesting::new(args.schedule)?,
         };
 
         Ok(())
     }
+
+    pub fn init_user_details(ctx: Context<InitUserDetails>, bump: u8) -> Result<()> {
+        let user_details = ctx.accounts.user_details.deref_mut();
+
+        *user_details = UserDetails {
+            last_claimed_at_ts: 0,
+            claimed_amount: 0,
+            bump,
+        };
+
+        Ok(())
+    }
+
+    // TODO: add/remove/update schedule entry
+    // schedule should stay consistent after changes
+    // changes should be no later than first schedule entry
 
     pub fn update_root(ctx: Context<UpdateRoot>, args: UpdateRootArgs) -> Result<()> {
         let distributor = &mut ctx.accounts.distributor;
 
         distributor.merkle_root = args.merkle_root;
         distributor.merkle_index += 1;
+
+        // TODO: allow to update root only before vesting starts
 
         emit!(MerkleRootUpdated {
             merkle_index: distributor.merkle_index,
@@ -183,9 +197,8 @@ pub mod claiming_factory {
     pub fn claim(ctx: Context<Claim>, args: ClaimArgs) -> Result<()> {
         let vault = &mut ctx.accounts.vault;
         let distributor = &ctx.accounts.distributor;
-        let bitmap = &mut ctx.accounts.bitmap;
+        let user_details = &mut ctx.accounts.user_details;
 
-        require!(!bitmap.is_claimed(args.index), AlreadyClaimed);
         require!(!distributor.paused, Paused);
 
         let leaf = [
@@ -206,6 +219,9 @@ pub mod claiming_factory {
 
         require!(computed_hash == distributor.merkle_root, InvalidProof);
 
+        // TODO: calculate total amount to claim
+        // let bps_to_claim = distributor.vesting.advance_schedule(&ctx.accounts.clock);
+
         let distributor_key = distributor.key();
         let seeds = &[distributor_key.as_ref(), &[distributor.vault_bump]];
         let signers = &[&seeds[..]];
@@ -220,7 +236,7 @@ pub mod claiming_factory {
         }
         .make()?;
 
-        bitmap.set_claimed(args.index);
+        // TODO: update user details
 
         emit!(Claimed {
             merkle_index: distributor.merkle_index,
@@ -246,33 +262,91 @@ impl Config {
 }
 
 #[account]
-pub struct BitMap {
-    // this fits to stack nicely
-    data: [u64; 64],
+pub struct UserDetails {
+    last_claimed_at_ts: u64,
+    claimed_amount: u64,
     bump: u8,
 }
 
-impl BitMap {
-    // 8 is for discriminator
-    pub const LEN: usize = std::mem::size_of::<Self>() + 8;
-    // this is not working due to anchor bug
-    // it fails to parse constant
-    // const ARRAY_SIZE: usize = 64;
+impl UserDetails {
+    pub const LEN: usize = 8 + std::mem::size_of::<Self>();
+}
 
-    fn is_claimed(&self, index: u64) -> bool {
-        let word_index = (index / 64) as usize;
-        let bit_index = index % 64;
-        let word = self.data[word_index];
-        let mask = 1 << bit_index;
+#[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
+pub struct Period {
+    /// Percentage in Basis Points (BPS). 1% = 100 BPS.
+    /// NOTE: Percentage is specified per interval. So if you have
+    /// 1000 BPS over 10 intervals then `token_percentage` should be 100 BPS.
+    token_percentage: u64,
+    start_ts: u64,
+    interval_sec: u64,
+    times: u64,
+}
 
-        word & mask == mask
+#[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
+pub struct Vesting {
+    schedule: Vec<Period>,
+}
+
+impl Vesting {
+    fn new(schedule: Vec<Period>) -> Result<Self> {
+        let s = Self { schedule };
+
+        s.validate()?;
+
+        Ok(s)
     }
 
-    fn set_claimed(&mut self, index: u64) {
-        let word_index = (index / 64) as usize;
-        let bit_index = index % 64;
-        self.data[word_index] = self.data[word_index] | (1 << bit_index);
+    fn validate(&self) -> Result<()> {
+        require!(self.schedule.len() > 0, EmptySchedule);
+
+        let mut last_start_ts = 0;
+        let mut total_percentage = 0;
+
+        for entry in &self.schedule {
+            require!(entry.times > 0, EmptyPeriod);
+            require!(last_start_ts < entry.start_ts, InvalidScheduleOrder);
+
+            // start_ts + (times * interval_sec)
+            last_start_ts = entry
+                .times
+                .checked_mul(entry.interval_sec)
+                .ok_or(ErrorCode::IntegerOverflow)?
+                .checked_add(entry.start_ts)
+                .ok_or(ErrorCode::IntegerOverflow)?;
+
+            total_percentage += entry.token_percentage * entry.times;
+        }
+
+        // 100% == 10000 basis points
+        require!(total_percentage == 10000, PercentageDoesntCoverAllTokens);
+
+        Ok(())
     }
+
+    // fn advance_schedule(&mut self, clock: &Sysvar<Clock>) -> u64 {
+    //     let now = clock.unix_timestamp as u64;
+    //     let mut total_percentage_to_claim = 0;
+
+    //     for period in self.schedule.iter().skip(self.current_period as usize) {
+    //         if now < period.start_ts {
+    //             break;
+    //         }
+
+    //         let seconds_since_start = now - period.start_ts;
+    //         let intervals_passed =
+    //             seconds_since_start / period.interval_sec - self.current_repetition;
+    //         let intervals_passed = std::cmp::min(intervals_passed, period.times);
+
+    //         total_percentage_to_claim += intervals_passed * period.token_percentage;
+
+    //         // it can be non-zero only during first period calculation
+    //         self.current_repetition = 0;
+    //         self.current_period += 1;
+    //     }
+
+    //     total_percentage_to_claim
+    // }
 }
 
 #[account]
@@ -283,28 +357,34 @@ pub struct MerkleDistributor {
     paused: bool,
     vault_bump: u8,
     vault: Pubkey,
+    vesting: Vesting,
 }
 
 impl MerkleDistributor {
-    pub const LEN: usize = std::mem::size_of::<Self>() + 8;
+    pub fn space_required(periods: &[Period]) -> usize {
+        8 + std::mem::size_of::<Self>() + periods.len() * std::mem::size_of::<Period>()
+    }
 }
 
 #[derive(Accounts)]
 #[instruction(bump: u8)]
-pub struct InitBitmap<'info> {
+pub struct InitUserDetails<'info> {
     #[account(mut)]
     payer: Signer<'info>,
+    /// CHECK:
+    user: AccountInfo<'info>,
     #[account(
         init,
         payer = payer,
-        space = BitMap::LEN,
+        space = UserDetails::LEN,
         seeds = [
             distributor.key().as_ref(),
             distributor.merkle_index.to_be_bytes().as_ref(),
+            user.key().as_ref(),
         ],
         bump,
     )]
-    bitmap: Account<'info, BitMap>,
+    user_details: Account<'info, UserDetails>,
     distributor: Account<'info, MerkleDistributor>,
 
     system_program: Program<'info, System>,
@@ -334,6 +414,7 @@ pub struct InitializeConfig<'info> {
 pub struct InitializeArgs {
     pub vault_bump: u8,
     pub merkle_root: [u8; 32],
+    pub schedule: Vec<Period>,
 }
 
 #[derive(Accounts)]
@@ -357,7 +438,7 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = admin_or_owner,
-        space = MerkleDistributor::LEN,
+        space = MerkleDistributor::space_required(&args.schedule),
     )]
     distributor: Account<'info, MerkleDistributor>,
 
@@ -497,6 +578,7 @@ pub struct WithdrawTokens<'info> {
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct ClaimArgs {
+    // TODO: remove
     index: u64,
     amount: u64,
     merkle_proof: Vec<[u8; 32]>,
@@ -506,16 +588,17 @@ pub struct ClaimArgs {
 #[instruction(args: ClaimArgs)]
 pub struct Claim<'info> {
     distributor: Account<'info, MerkleDistributor>,
-    claimer: Signer<'info>,
+    user: Signer<'info>,
     #[account(
         mut,
         seeds = [
             distributor.key().as_ref(),
             distributor.merkle_index.to_be_bytes().as_ref(),
+            user.key().as_ref(),
         ],
-        bump = bitmap.bump
+        bump = user_details.bump
     )]
-    bitmap: Box<Account<'info, BitMap>>,
+    user_details: Account<'info, UserDetails>,
 
     /// CHECK:
     #[account(
@@ -537,6 +620,7 @@ pub struct Claim<'info> {
     target_wallet: Account<'info, TokenAccount>,
 
     token_program: Program<'info, Token>,
+    clock: Sysvar<'info, Clock>,
 }
 
 struct TokenTransfer<'pay, 'info> {

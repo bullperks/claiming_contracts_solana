@@ -7,43 +7,12 @@
       "accounts": [
         {
           "name": "owner",
-          "isMut": false,
+          "isMut": true,
           "isSigner": true
         },
         {
           "name": "config",
           "isMut": true,
-          "isSigner": false
-        },
-        {
-          "name": "systemProgram",
-          "isMut": false,
-          "isSigner": false
-        }
-      ],
-      "args": [
-        {
-          "name": "bump",
-          "type": "u8"
-        }
-      ]
-    },
-    {
-      "name": "initBitmap",
-      "accounts": [
-        {
-          "name": "payer",
-          "isMut": false,
-          "isSigner": true
-        },
-        {
-          "name": "bitmap",
-          "isMut": true,
-          "isSigner": false
-        },
-        {
-          "name": "distributor",
-          "isMut": false,
           "isSigner": false
         },
         {
@@ -69,7 +38,7 @@
         },
         {
           "name": "adminOrOwner",
-          "isMut": false,
+          "isMut": true,
           "isSigner": true
         },
         {
@@ -99,6 +68,42 @@
           "type": {
             "defined": "InitializeArgs"
           }
+        }
+      ]
+    },
+    {
+      "name": "initUserDetails",
+      "accounts": [
+        {
+          "name": "payer",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "user",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "userDetails",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "distributor",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "bump",
+          "type": "u8"
         }
       ]
     },
@@ -253,12 +258,12 @@
           "isSigner": false
         },
         {
-          "name": "claimer",
+          "name": "user",
           "isMut": false,
           "isSigner": true
         },
         {
-          "name": "bitmap",
+          "name": "userDetails",
           "isMut": true,
           "isSigner": false
         },
@@ -279,6 +284,11 @@
         },
         {
           "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "clock",
           "isMut": false,
           "isSigner": false
         }
@@ -322,18 +332,17 @@
       }
     },
     {
-      "name": "BitMap",
+      "name": "UserDetails",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "data",
-            "type": {
-              "array": [
-                "u64",
-                64
-              ]
-            }
+            "name": "lastClaimedAtTs",
+            "type": "u64"
+          },
+          {
+            "name": "claimedAmount",
+            "type": "u64"
           },
           {
             "name": "bump",
@@ -371,12 +380,58 @@
           {
             "name": "vault",
             "type": "publicKey"
+          },
+          {
+            "name": "vesting",
+            "type": {
+              "defined": "Vesting"
+            }
           }
         ]
       }
     }
   ],
   "types": [
+    {
+      "name": "Period",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "tokenPercentage",
+            "type": "u64"
+          },
+          {
+            "name": "startTs",
+            "type": "u64"
+          },
+          {
+            "name": "intervalSec",
+            "type": "u64"
+          },
+          {
+            "name": "times",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Vesting",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "schedule",
+            "type": {
+              "vec": {
+                "defined": "Period"
+              }
+            }
+          }
+        ]
+      }
+    },
     {
       "name": "InitializeArgs",
       "type": {
@@ -393,6 +448,14 @@
                 "u8",
                 32
               ]
+            }
+          },
+          {
+            "name": "schedule",
+            "type": {
+              "vec": {
+                "defined": "Period"
+              }
             }
           }
         ]
@@ -545,9 +608,29 @@
     {
       "code": 6008,
       "name": "Paused"
+    },
+    {
+      "code": 6009,
+      "name": "EmptySchedule"
+    },
+    {
+      "code": 6010,
+      "name": "InvalidScheduleOrder"
+    },
+    {
+      "code": 6011,
+      "name": "PercentageDoesntCoverAllTokens"
+    },
+    {
+      "code": 6012,
+      "name": "EmptyPeriod"
+    },
+    {
+      "code": 6013,
+      "name": "IntegerOverflow"
     }
   ],
   "metadata": {
-    "address": "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
+    "address": "3yELWiEQynmnXAavxAuQC9RDA4VoVkJeZSvX5a6P4Vvs"
   }
 }

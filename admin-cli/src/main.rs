@@ -205,6 +205,8 @@ fn main() -> Result<()> {
                     args: claiming_factory::InitializeArgs {
                         vault_bump,
                         merkle_root: merkle.data,
+                        // TODO: init schedule
+                        schedule: Vec::new(),
                     },
                 })
                 .signer(payer.as_ref())

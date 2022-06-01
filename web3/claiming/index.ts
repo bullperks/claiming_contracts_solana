@@ -33,6 +33,19 @@ export type CreateDistributorArgs = {
   merkleRoot: number[],
 };
 
+export type Period = {
+  tokenPercentage: anchor.BN,
+  startTs: anchor.BN,
+  intervalSec: anchor.BN,
+  times: anchor.BN,
+};
+
+export type UserDetails = {
+  lastClaimedAtTs: anchor.BN,
+  claimedAmount: anchor.BN,
+  bump: number,
+};
+
 const FAILED_TO_FIND_ACCOUNT = "Account does not exist";
 
 export class Client {
@@ -113,7 +126,7 @@ export class Client {
     return [vaultAuthority, vaultBump];
   }
 
-  async createDistributor(mint: anchor.web3.PublicKey, merkleRoot: number[]): Promise<anchor.web3.PublicKey> {
+  async createDistributor(mint: anchor.web3.PublicKey, merkleRoot: number[], schedule: Period[]): Promise<anchor.web3.PublicKey> {
     const distributor = anchor.web3.Keypair.generate();
     const [vaultAuthority, vaultBump] = await this.findVaultAuthority(distributor.publicKey);
     const [config, _bump] = await this.findConfigAddress();
@@ -130,6 +143,7 @@ export class Client {
       {
         vaultBump,
         merkleRoot,
+        schedule,
       },
       {
         accounts: {
@@ -234,49 +248,56 @@ export class Client {
     );
   }
 
-  async findBitmapAddress(distributor: anchor.web3.PublicKey): Promise<[anchor.web3.PublicKey, number]> {
+  async findUserDetailsAddress(
+    distributor: anchor.web3.PublicKey,
+    user: anchor.web3.PublicKey
+  ): Promise<[anchor.web3.PublicKey, number]> {
     const distributorAccount = await this.program.account.merkleDistributor.fetch(distributor);
-    const [bitmap, bump] = await anchor.web3.PublicKey.findProgramAddress(
+    const [userDetails, bump] = await anchor.web3.PublicKey.findProgramAddress(
       [
         distributor.toBytes(),
-        distributorAccount.merkleIndex.toArray('be', 8)
+        distributorAccount.merkleIndex.toArray('be', 8),
+        user.toBytes(),
       ],
       this.program.programId
     );
 
-    return [bitmap, bump];
+    return [userDetails, bump];
   }
 
-  async initBitmap(distributor: anchor.web3.PublicKey): Promise<anchor.web3.PublicKey> {
-    const [bitmap, bump] = await this.findBitmapAddress(distributor);
-    await this.program.rpc.initBitmap(
+  async initUserDetails(
+    distributor: anchor.web3.PublicKey,
+    user: anchor.web3.PublicKey
+  ): Promise<anchor.web3.PublicKey> {
+    const [userDetails, bump] = await this.findUserDetailsAddress(distributor, user);
+    await this.program.rpc.initUserDetails(
       bump,
       {
         accounts: {
           payer: this.provider.wallet.publicKey,
-          bitmap,
+          user,
+          userDetails,
           distributor,
           systemProgram: anchor.web3.SystemProgram.programId,
         }
       }
     );
-    return bitmap;
+    return userDetails;
   }
 
-  async isClaimed(distributor: anchor.web3.PublicKey, index: anchor.BN): Promise<boolean> {
-    const [bitmap, _bump] = await this.findBitmapAddress(distributor);
+  async getUserDetails(
+    distributor: anchor.web3.PublicKey,
+    user: anchor.web3.PublicKey
+  ): Promise<UserDetails | null> {
+    const [userDetails, _bump] = await this.findUserDetailsAddress(distributor, user);
 
     try {
-      const bitmapAccount = await this.program.account.bitMap.fetch(bitmap);
-      const wordIndex = index.divn(64).toNumber();
-      const bitIndex = index.modrn(64);
-      const word = bitmapAccount.data[wordIndex].toNumber();
-      const mask = 1 << bitIndex;
-      return (word & mask) == mask;
+      const userDetailsAccount = await this.program.account.userDetails.fetch(userDetails);
+      return userDetailsAccount;
     } catch (err) {
-      const errMessage = `${FAILED_TO_FIND_ACCOUNT} ${bitmap.toString()}`;
+      const errMessage = `${FAILED_TO_FIND_ACCOUNT} ${userDetails.toString()}`;
       if (err.message === errMessage) {
-        return false;
+        return null;
       } else {
         throw err;
       }
@@ -292,7 +313,10 @@ export class Client {
   ) {
     const distributorAccount = await this.program.account.merkleDistributor.fetch(distributor);
     const [vaultAuthority, _vaultBump] = await this.findVaultAuthority(distributor);
-    const [bitmap, _bitmapBump] = await this.findBitmapAddress(distributor);
+    const [userDetails, _userDetailsBump] = await this.findUserDetailsAddress(
+      distributor,
+      this.provider.wallet.publicKey
+    );
     await this.program.rpc.claim(
       {
         index,
@@ -302,12 +326,13 @@ export class Client {
       {
         accounts: {
           distributor,
-          claimer: this.provider.wallet.publicKey,
-          bitmap,
+          user: this.provider.wallet.publicKey,
+          userDetails,
           vaultAuthority,
           vault: distributorAccount.vault,
           targetWallet,
           tokenProgram: TOKEN_PROGRAM_ID,
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
         }
       }
     );
