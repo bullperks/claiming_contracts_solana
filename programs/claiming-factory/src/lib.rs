@@ -94,9 +94,22 @@ pub mod claiming_factory {
         Ok(())
     }
 
-    // TODO: add/remove/update schedule entry
-    // schedule should stay consistent after changes
-    // changes should be no later than first schedule entry
+    pub fn update_schedule(ctx: Context<UpdateSchedule>, args: UpdateScheduleArgs) -> Result<()> {
+        let distributor = &mut ctx.accounts.distributor;
+
+        require!(
+            !distributor.vesting.has_started(&ctx.accounts.clock),
+            VestingAlreadyStarted
+        );
+
+        for change in args.changes {
+            distributor.vesting.apply_change(change);
+        }
+
+        distributor.vesting.validate()?;
+
+        Ok(())
+    }
 
     pub fn update_root(ctx: Context<UpdateRoot>, args: UpdateRootArgs) -> Result<()> {
         let distributor = &mut ctx.accounts.distributor;
@@ -337,6 +350,20 @@ impl Vesting {
         first_period.start_ts <= now
     }
 
+    fn apply_change(&mut self, change: Change) {
+        match change {
+            Change::Update { index, period } => {
+                self.schedule[index as usize] = period;
+            }
+            Change::Remove { index } => {
+                self.schedule.remove(index as usize);
+            }
+            Change::Push { period } => {
+                self.schedule.push(period);
+            }
+        }
+    }
+
     // fn advance_schedule(&mut self, clock: &Sysvar<Clock>) -> u64 {
     //     let now = clock.unix_timestamp as u64;
     //     let mut total_percentage_to_claim = 0;
@@ -477,6 +504,39 @@ pub struct UpdateRootArgs {
 
 #[derive(Accounts)]
 pub struct UpdateRoot<'info> {
+    #[account(mut)]
+    distributor: Account<'info, MerkleDistributor>,
+    #[account(
+        seeds = [
+            "config".as_ref()
+        ],
+        bump = config.bump
+    )]
+    config: Account<'info, Config>,
+    #[account(
+        constraint = admin_or_owner.key() == config.owner ||
+            config.admins.contains(&Some(admin_or_owner.key()))
+            @ ErrorCode::NotAdminOrOwner
+    )]
+    admin_or_owner: Signer<'info>,
+
+    clock: Sysvar<'info, Clock>,
+}
+
+#[derive(AnchorDeserialize, AnchorSerialize)]
+pub enum Change {
+    Update { index: u64, period: Period },
+    Remove { index: u64 },
+    Push { period: Period },
+}
+
+#[derive(AnchorDeserialize, AnchorSerialize)]
+pub struct UpdateScheduleArgs {
+    changes: Vec<Change>,
+}
+
+#[derive(Accounts)]
+pub struct UpdateSchedule<'info> {
     #[account(mut)]
     distributor: Account<'info, MerkleDistributor>,
     #[account(

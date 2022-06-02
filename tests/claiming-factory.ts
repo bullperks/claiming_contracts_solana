@@ -425,6 +425,10 @@ describe('claiming-factory', () => {
       });
     });
 
+    context("update schedule", async function () {
+      // TODO: add tests
+    });
+
     context("claim", async function () {
       it("should claim correctly", async function () {
         const [merkleElement, claimingUser] = await claim(this.distributor, 29);
