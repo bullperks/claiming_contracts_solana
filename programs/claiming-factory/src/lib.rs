@@ -24,6 +24,7 @@ pub enum ErrorCode {
     PercentageDoesntCoverAllTokens,
     EmptyPeriod,
     IntegerOverflow,
+    VestingAlreadyStarted,
 }
 
 /// This event is triggered whenever a call to claim succeeds.
@@ -100,10 +101,13 @@ pub mod claiming_factory {
     pub fn update_root(ctx: Context<UpdateRoot>, args: UpdateRootArgs) -> Result<()> {
         let distributor = &mut ctx.accounts.distributor;
 
+        require!(
+            !distributor.vesting.has_started(&ctx.accounts.clock),
+            VestingAlreadyStarted
+        );
+
         distributor.merkle_root = args.merkle_root;
         distributor.merkle_index += 1;
-
-        // TODO: allow to update root only before vesting starts
 
         emit!(MerkleRootUpdated {
             merkle_index: distributor.merkle_index,
@@ -326,6 +330,13 @@ impl Vesting {
         Ok(())
     }
 
+    fn has_started(&self, clock: &Sysvar<Clock>) -> bool {
+        let first_period = self.schedule.first().unwrap();
+        let now = clock.unix_timestamp as u64;
+
+        first_period.start_ts <= now
+    }
+
     // fn advance_schedule(&mut self, clock: &Sysvar<Clock>) -> u64 {
     //     let now = clock.unix_timestamp as u64;
     //     let mut total_percentage_to_claim = 0;
@@ -481,6 +492,8 @@ pub struct UpdateRoot<'info> {
             @ ErrorCode::NotAdminOrOwner
     )]
     admin_or_owner: Signer<'info>,
+
+    clock: Sysvar<'info, Clock>,
 }
 
 #[derive(Accounts)]

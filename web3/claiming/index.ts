@@ -243,6 +243,7 @@ export class Client {
           distributor,
           config,
           adminOrOwner: this.provider.wallet.publicKey,
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
         }
       }
     );

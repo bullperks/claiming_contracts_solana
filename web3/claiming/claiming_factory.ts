@@ -124,6 +124,11 @@ export type ClaimingFactory = {
           "name": "adminOrOwner",
           "isMut": false,
           "isSigner": true
+        },
+        {
+          "name": "clock",
+          "isMut": false,
+          "isSigner": false
         }
       ],
       "args": [
@@ -624,6 +629,10 @@ export type ClaimingFactory = {
     {
       "code": 6013,
       "name": "IntegerOverflow"
+    },
+    {
+      "code": 6014,
+      "name": "VestingAlreadyStarted"
     }
   ]
 };
@@ -754,6 +763,11 @@ export const IDL: ClaimingFactory = {
           "name": "adminOrOwner",
           "isMut": false,
           "isSigner": true
+        },
+        {
+          "name": "clock",
+          "isMut": false,
+          "isSigner": false
         }
       ],
       "args": [
@@ -1254,6 +1268,10 @@ export const IDL: ClaimingFactory = {
     {
       "code": 6013,
       "name": "IntegerOverflow"
+    },
+    {
+      "code": 6014,
+      "name": "VestingAlreadyStarted"
     }
   ]
 };

@@ -124,6 +124,11 @@
           "name": "adminOrOwner",
           "isMut": false,
           "isSigner": true
+        },
+        {
+          "name": "clock",
+          "isMut": false,
+          "isSigner": false
         }
       ],
       "args": [
@@ -624,6 +629,10 @@
     {
       "code": 6013,
       "name": "IntegerOverflow"
+    },
+    {
+      "code": 6014,
+      "name": "VestingAlreadyStarted"
     }
   ],
   "metadata": {
