@@ -312,7 +312,6 @@ export class Client {
   async claim(
     distributor: anchor.web3.PublicKey,
     targetWallet: anchor.web3.PublicKey,
-    index: anchor.BN,
     amount: anchor.BN,
     merkleProof: number[][]
   ) {
@@ -324,7 +323,6 @@ export class Client {
     );
     await this.program.rpc.claim(
       {
-        index,
         amount,
         merkleProof
       },

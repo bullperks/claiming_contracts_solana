@@ -30,8 +30,8 @@ pub enum ErrorCode {
 #[event]
 pub struct Claimed {
     merkle_index: u64,
-    index: u64,
     account: Pubkey,
+    token_account: Pubkey,
     amount: u64,
 }
 
@@ -203,8 +203,7 @@ pub mod claiming_factory {
         require!(user_details.claimed_amount < args.amount, AlreadyClaimed);
 
         let leaf = [
-            &args.index.to_be_bytes()[..],
-            &ctx.accounts.user.key().to_bytes(),
+            &ctx.accounts.user.key().to_bytes()[..],
             &args.amount.to_be_bytes(),
         ];
         let leaf = keccak::hashv(&leaf).0;
@@ -243,8 +242,8 @@ pub mod claiming_factory {
 
         emit!(Claimed {
             merkle_index: distributor.merkle_index,
-            index: args.index,
             account: ctx.accounts.user.key(),
+            token_account: ctx.accounts.target_wallet.key(),
             amount,
         });
 
@@ -581,8 +580,6 @@ pub struct WithdrawTokens<'info> {
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct ClaimArgs {
-    // TODO: remove
-    index: u64,
     amount: u64,
     merkle_proof: Vec<[u8; 32]>,
 }

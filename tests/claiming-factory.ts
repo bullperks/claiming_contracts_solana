@@ -88,7 +88,6 @@ describe('claiming-factory', () => {
       await elementClient.claim(
         distributor,
         claimingUser.tokenAccount,
-        merkleElement.index,
         merkleElement.amount,
         merkleElement.proofs
       );

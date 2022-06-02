@@ -488,10 +488,6 @@ export type ClaimingFactory = {
         "kind": "struct",
         "fields": [
           {
-            "name": "index",
-            "type": "u64"
-          },
-          {
             "name": "amount",
             "type": "u64"
           },
@@ -520,12 +516,12 @@ export type ClaimingFactory = {
           "index": false
         },
         {
-          "name": "index",
-          "type": "u64",
+          "name": "account",
+          "type": "publicKey",
           "index": false
         },
         {
-          "name": "account",
+          "name": "tokenAccount",
           "type": "publicKey",
           "index": false
         },
@@ -1122,10 +1118,6 @@ export const IDL: ClaimingFactory = {
         "kind": "struct",
         "fields": [
           {
-            "name": "index",
-            "type": "u64"
-          },
-          {
             "name": "amount",
             "type": "u64"
           },
@@ -1154,12 +1146,12 @@ export const IDL: ClaimingFactory = {
           "index": false
         },
         {
-          "name": "index",
-          "type": "u64",
+          "name": "account",
+          "type": "publicKey",
           "index": false
         },
         {
-          "name": "account",
+          "name": "tokenAccount",
           "type": "publicKey",
           "index": false
         },

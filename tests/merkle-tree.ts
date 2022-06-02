@@ -8,7 +8,6 @@ export type MerkleTreeElement = {
 
 export type MerkleProof = {
   proofs: number[][],
-  index: anchor.BN,
   address: anchor.web3.PublicKey,
   amount: anchor.BN,
 };
@@ -21,16 +20,13 @@ export type MerkleData = {
 
 export function getMerkleProof(data: MerkleTreeElement[]): MerkleData {
   let totalTokens = 0;
-  let gIndex = 0;
   const elements = data.map((x) => {
-    const index = new anchor.BN(gIndex++);
     const address = x.address;
     const amount = new anchor.BN(x.amount);
-    const leaf = MerkleTree.toLeaf(index, address, amount);
+    const leaf = MerkleTree.toLeaf(address, amount);
     totalTokens += x.amount * 1;
     return {
       leaf,
-      index,
       address,
       amount
     };
@@ -101,8 +97,8 @@ export class MerkleTree {
     }, []);
   }
 
-  public static verifyProof(index, account, amount, proof, root) {
-    let computedHash = MerkleTree.toLeaf(index, account, amount);
+  public static verifyProof(account, amount, proof, root) {
+    let computedHash = MerkleTree.toLeaf(account, amount);
     for (const item of proof) {
       computedHash = MerkleTree.combinedHash(computedHash, item);
       console.log(computedHash);
@@ -111,9 +107,8 @@ export class MerkleTree {
     return computedHash.equals(root);
   }
 
-  public static toLeaf(index: anchor.BN, account: anchor.web3.PublicKey, amount: anchor.BN): Buffer {
+  public static toLeaf(account: anchor.web3.PublicKey, amount: anchor.BN): Buffer {
     const buf = Buffer.concat([
-      Buffer.from(index.toArray('be', 8)),
       account.toBuffer(),
       Buffer.from(amount.toArray('be', 8)),
     ]);

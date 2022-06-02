@@ -41,7 +41,6 @@ export async function generateMerkle(mint: spl.Token) {
     console.log("Root", JSON.stringify(merkleData.root));
     for (const data of merkleData.proofs) {
         console.log("======================");
-        console.log("Index", data.index.toNumber());
         console.log("User", data.address.toString());
         console.log("Amount", data.amount.toNumber());
         console.log("Proofs");
