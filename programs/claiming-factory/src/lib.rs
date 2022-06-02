@@ -200,10 +200,11 @@ pub mod claiming_factory {
         let user_details = &mut ctx.accounts.user_details;
 
         require!(!distributor.paused, Paused);
+        require!(user_details.claimed_amount < args.amount, AlreadyClaimed);
 
         let leaf = [
             &args.index.to_be_bytes()[..],
-            &ctx.accounts.target_wallet.key().to_bytes(),
+            &ctx.accounts.user.key().to_bytes(),
             &args.amount.to_be_bytes(),
         ];
         let leaf = keccak::hashv(&leaf).0;
@@ -221,13 +222,14 @@ pub mod claiming_factory {
 
         // TODO: calculate total amount to claim
         // let bps_to_claim = distributor.vesting.advance_schedule(&ctx.accounts.clock);
+        let amount = args.amount;
 
         let distributor_key = distributor.key();
         let seeds = &[distributor_key.as_ref(), &[distributor.vault_bump]];
         let signers = &[&seeds[..]];
 
         TokenTransfer {
-            amount: args.amount,
+            amount,
             from: vault,
             to: &ctx.accounts.target_wallet,
             authority: &ctx.accounts.vault_authority,
@@ -236,13 +238,14 @@ pub mod claiming_factory {
         }
         .make()?;
 
-        // TODO: update user details
+        user_details.claimed_amount = amount;
+        user_details.last_claimed_at_ts = ctx.accounts.clock.unix_timestamp as u64;
 
         emit!(Claimed {
             merkle_index: distributor.merkle_index,
             index: args.index,
-            account: ctx.accounts.target_wallet.key(),
-            amount: args.amount
+            account: ctx.accounts.user.key(),
+            amount,
         });
 
         Ok(())

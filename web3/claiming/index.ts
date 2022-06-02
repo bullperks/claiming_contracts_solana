@@ -270,18 +270,23 @@ export class Client {
     user: anchor.web3.PublicKey
   ): Promise<anchor.web3.PublicKey> {
     const [userDetails, bump] = await this.findUserDetailsAddress(distributor, user);
-    await this.program.rpc.initUserDetails(
-      bump,
-      {
-        accounts: {
-          payer: this.provider.wallet.publicKey,
-          user,
-          userDetails,
-          distributor,
-          systemProgram: anchor.web3.SystemProgram.programId,
+    const userDetailsAccount = await this.getUserDetails(distributor, user);
+
+    if (userDetailsAccount === null) {
+      await this.program.rpc.initUserDetails(
+        bump,
+        {
+          accounts: {
+            payer: this.provider.wallet.publicKey,
+            user,
+            userDetails,
+            distributor,
+            systemProgram: anchor.web3.SystemProgram.programId,
+          }
         }
-      }
-    );
+      );
+    }
+
     return userDetails;
   }
 

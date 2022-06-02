@@ -42,7 +42,7 @@ export async function generateMerkle(mint: spl.Token) {
     for (const data of merkleData.proofs) {
         console.log("======================");
         console.log("Index", data.index.toNumber());
-        console.log("Token account", data.address.toString());
+        console.log("User", data.address.toString());
         console.log("Amount", data.amount.toNumber());
         console.log("Proofs");
         for (const proof of data.proofs) {
