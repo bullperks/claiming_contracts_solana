@@ -62,7 +62,7 @@ describe('claiming-factory', () => {
       let tx = await provider.connection.requestAirdrop(wallet.publicKey, 2 * LAMPORTS_PER_SOL);
       await provider.connection.confirmTransaction(tx);
 
-      wallets.push({wallet, tokenAccount});
+      wallets.push({ wallet, tokenAccount });
     }
     return [merkle.getMerkleProof(data), wallets];
   }
@@ -80,29 +80,29 @@ describe('claiming-factory', () => {
   }
 
   async function claim(distributor: anchor.web3.PublicKey, index: number, proof?: merkle.MerkleProof): Promise<[merkle.MerkleProof, ClaimingUser]> {
-      const merkleElement = proof ? proof : merkleData.proofs[index];
-      const claimingUser = claimingUsers[index];
-      const elementClient = new claiming.Client(claimingUser.wallet, claiming.LOCALNET);
-      await elementClient.initUserDetails(distributor, merkleElement.address);
+    const merkleElement = proof ? proof : merkleData.proofs[index];
+    const claimingUser = claimingUsers[index];
+    const elementClient = new claiming.Client(claimingUser.wallet, claiming.LOCALNET);
+    await elementClient.initUserDetails(distributor, merkleElement.address);
 
-      while (true) {
-        try {
-          await elementClient.claim(
-            distributor,
-            claimingUser.tokenAccount,
-            merkleElement.amount,
-            merkleElement.proofs
-          );
-          break;
-        } catch (err: any) {
-          if (err.code != 6015) {
-            throw err;
-          }
-          await serumCmn.sleep(15000);
+    while (true) {
+      try {
+        await elementClient.claim(
+          distributor,
+          claimingUser.tokenAccount,
+          merkleElement.amount,
+          merkleElement.proofs
+        );
+        break;
+      } catch (err: any) {
+        if (err.code != 6015) {
+          throw err;
         }
+        await serumCmn.sleep(15000);
       }
+    }
 
-      return [merkleElement, claimingUser];
+    return [merkleElement, claimingUser];
   }
 
   before(async () => {
@@ -495,27 +495,6 @@ describe('claiming-factory', () => {
             return true;
           }
         );
-      });
-
-      it("should claim correctly twice, if root has been changed", async function () {
-        let [merkleElement, claimingUser] = await claim(this.distributor, 25);
-
-        const firstAmount = merkleElement.amount;
-        let targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUser.tokenAccount);
-        assert.ok(targetWalletAccount.amount.eq(firstAmount));
-
-        let data = [];
-        for (const elem of merkleData.proofs) {
-          data.push({ address: elem.address, amount: elem.amount.toNumber() * 2 });
-        }
-        let updatedMerkleData = merkle.getMerkleProof(data);
-
-        await client.updateRoot(this.distributor, updatedMerkleData.root, true);
-
-        [merkleElement, claimingUser] = await claim(this.distributor, 25, updatedMerkleData.proofs[25]);
-
-        targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUser.tokenAccount);
-        assert.ok(targetWalletAccount.amount.eq(merkleElement.amount.add(firstAmount)));
       });
     });
 
