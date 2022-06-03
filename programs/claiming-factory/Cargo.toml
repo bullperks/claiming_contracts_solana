@@ -17,3 +17,4 @@ no-idl = []
 [dependencies]
 anchor-lang = "0.24"
 anchor-spl = "0.24"
+rust_decimal = "1.24"

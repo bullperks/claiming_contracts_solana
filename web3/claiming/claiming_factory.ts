@@ -108,6 +108,39 @@ export type ClaimingFactory = {
       ]
     },
     {
+      "name": "updateSchedule",
+      "accounts": [
+        {
+          "name": "distributor",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "config",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "adminOrOwner",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "clock",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": "UpdateScheduleArgs"
+          }
+        }
+      ]
+    },
+    {
       "name": "updateRoot",
       "accounts": [
         {
@@ -488,6 +521,22 @@ export type ClaimingFactory = {
       }
     },
     {
+      "name": "UpdateScheduleArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "changes",
+            "type": {
+              "vec": {
+                "defined": "Change"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "ClaimArgs",
       "type": {
         "kind": "struct",
@@ -506,6 +555,49 @@ export type ClaimingFactory = {
                 ]
               }
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Change",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Update",
+            "fields": [
+              {
+                "name": "index",
+                "type": "u64"
+              },
+              {
+                "name": "period",
+                "type": {
+                  "defined": "Period"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Remove",
+            "fields": [
+              {
+                "name": "index",
+                "type": "u64"
+              }
+            ]
+          },
+          {
+            "name": "Push",
+            "fields": [
+              {
+                "name": "period",
+                "type": {
+                  "defined": "Period"
+                }
+              }
+            ]
           }
         ]
       }
@@ -633,6 +725,10 @@ export type ClaimingFactory = {
     {
       "code": 6014,
       "name": "VestingAlreadyStarted"
+    },
+    {
+      "code": 6015,
+      "name": "NothingToClaim"
     }
   ]
 };
@@ -747,6 +843,39 @@ export const IDL: ClaimingFactory = {
       ]
     },
     {
+      "name": "updateSchedule",
+      "accounts": [
+        {
+          "name": "distributor",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "config",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "adminOrOwner",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "clock",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": "UpdateScheduleArgs"
+          }
+        }
+      ]
+    },
+    {
       "name": "updateRoot",
       "accounts": [
         {
@@ -1127,6 +1256,22 @@ export const IDL: ClaimingFactory = {
       }
     },
     {
+      "name": "UpdateScheduleArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "changes",
+            "type": {
+              "vec": {
+                "defined": "Change"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "ClaimArgs",
       "type": {
         "kind": "struct",
@@ -1145,6 +1290,49 @@ export const IDL: ClaimingFactory = {
                 ]
               }
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Change",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Update",
+            "fields": [
+              {
+                "name": "index",
+                "type": "u64"
+              },
+              {
+                "name": "period",
+                "type": {
+                  "defined": "Period"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Remove",
+            "fields": [
+              {
+                "name": "index",
+                "type": "u64"
+              }
+            ]
+          },
+          {
+            "name": "Push",
+            "fields": [
+              {
+                "name": "period",
+                "type": {
+                  "defined": "Period"
+                }
+              }
+            ]
           }
         ]
       }
@@ -1272,6 +1460,10 @@ export const IDL: ClaimingFactory = {
     {
       "code": 6014,
       "name": "VestingAlreadyStarted"
+    },
+    {
+      "code": 6015,
+      "name": "NothingToClaim"
     }
   ]
 };

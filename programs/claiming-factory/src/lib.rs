@@ -5,6 +5,10 @@ use anchor_lang::{
     solana_program::{keccak, log::sol_log_64},
 };
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
+use rust_decimal::{
+    prelude::{FromPrimitive, ToPrimitive},
+    Decimal,
+};
 
 declare_id!("3yELWiEQynmnXAavxAuQC9RDA4VoVkJeZSvX5a6P4Vvs");
 
@@ -25,6 +29,7 @@ pub enum ErrorCode {
     EmptyPeriod,
     IntegerOverflow,
     VestingAlreadyStarted,
+    NothingToClaim,
 }
 
 /// This event is triggered whenever a call to claim succeeds.
@@ -236,9 +241,14 @@ pub mod claiming_factory {
 
         require!(computed_hash == distributor.merkle_root, InvalidProof);
 
-        // TODO: calculate total amount to claim
-        // let bps_to_claim = distributor.vesting.advance_schedule(&ctx.accounts.clock);
-        let amount = args.amount;
+        let bps_to_claim = distributor
+            .vesting
+            .bps_available_to_claim(&ctx.accounts.clock, &user_details);
+        let amount = (Decimal::from_u64(args.amount).unwrap() * bps_to_claim)
+            .ceil()
+            .to_u64()
+            .unwrap();
+        require!(amount > 0, NothingToClaim);
 
         let distributor_key = distributor.key();
         let seeds = &[distributor_key.as_ref(), &[distributor.vault_bump]];
@@ -294,8 +304,7 @@ impl UserDetails {
 #[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
 pub struct Period {
     /// Percentage in Basis Points (BPS). 1% = 100 BPS.
-    /// NOTE: Percentage is specified per interval. So if you have
-    /// 1000 BPS over 10 intervals then `token_percentage` should be 100 BPS.
+    /// NOTE: Percentage is for the whole period.
     token_percentage: u64,
     start_ts: u64,
     interval_sec: u64,
@@ -334,7 +343,7 @@ impl Vesting {
                 .checked_add(entry.start_ts)
                 .ok_or(ErrorCode::IntegerOverflow)?;
 
-            total_percentage += entry.token_percentage * entry.times;
+            total_percentage += entry.token_percentage;
         }
 
         // 100% == 10000 basis points
@@ -364,29 +373,51 @@ impl Vesting {
         }
     }
 
-    // fn advance_schedule(&mut self, clock: &Sysvar<Clock>) -> u64 {
-    //     let now = clock.unix_timestamp as u64;
-    //     let mut total_percentage_to_claim = 0;
+    fn bps_available_to_claim(&self, clock: &Sysvar<Clock>, user_details: &UserDetails) -> Decimal {
+        let now = clock.unix_timestamp as u64;
+        let mut total_percentage_to_claim = Decimal::ZERO;
 
-    //     for period in self.schedule.iter().skip(self.current_period as usize) {
-    //         if now < period.start_ts {
-    //             break;
-    //         }
+        for period in self.schedule.iter() {
+            sol_log_64(now, period.start_ts, 0, 0, 0);
 
-    //         let seconds_since_start = now - period.start_ts;
-    //         let intervals_passed =
-    //             seconds_since_start / period.interval_sec - self.current_repetition;
-    //         let intervals_passed = std::cmp::min(intervals_passed, period.times);
+            // too early to claim
+            if now < period.start_ts {
+                break;
+            }
 
-    //         total_percentage_to_claim += intervals_passed * period.token_percentage;
+            let last_claimed_at_ts_aligned_by_interval = user_details.last_claimed_at_ts
+                - user_details.last_claimed_at_ts % period.interval_sec;
+            let seconds_passed =
+                now - std::cmp::max(period.start_ts, last_claimed_at_ts_aligned_by_interval);
+            let intervals_passed = seconds_passed / period.interval_sec;
+            let intervals_passed = std::cmp::min(intervals_passed, period.times);
 
-    //         // it can be non-zero only during first period calculation
-    //         self.current_repetition = 0;
-    //         self.current_period += 1;
-    //     }
+            sol_log_64(
+                user_details.last_claimed_at_ts,
+                last_claimed_at_ts_aligned_by_interval,
+                seconds_passed,
+                now,
+                intervals_passed,
+            );
 
-    //     total_percentage_to_claim
-    // }
+            let percentage_for_intervals = (Decimal::new(period.token_percentage as i64, 4)
+                / Decimal::from_u64(period.times).unwrap())
+                * Decimal::from_u64(intervals_passed).unwrap();
+
+            total_percentage_to_claim += percentage_for_intervals;
+        }
+
+        total_percentage_to_claim
+    }
+}
+
+#[test]
+fn test() {
+    assert_eq!(Decimal::new(10000, 4).to_string(), "1.0000");
+    assert_eq!(
+        (Decimal::new(100, 4) * Decimal::new(100000, 0)).to_string(),
+        "1000.0000"
+    );
 }
 
 #[account]

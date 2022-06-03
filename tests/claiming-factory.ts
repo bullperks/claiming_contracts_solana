@@ -85,12 +85,22 @@ describe('claiming-factory', () => {
       const elementClient = new claiming.Client(claimingUser.wallet, claiming.LOCALNET);
       await elementClient.initUserDetails(distributor, merkleElement.address);
 
-      await elementClient.claim(
-        distributor,
-        claimingUser.tokenAccount,
-        merkleElement.amount,
-        merkleElement.proofs
-      );
+      while (true) {
+        try {
+          await elementClient.claim(
+            distributor,
+            claimingUser.tokenAccount,
+            merkleElement.amount,
+            merkleElement.proofs
+          );
+          break;
+        } catch (err: any) {
+          if (err.code != 6015) {
+            throw err;
+          }
+          await serumCmn.sleep(15000);
+        }
+      }
 
       return [merkleElement, claimingUser];
   }
@@ -419,9 +429,17 @@ describe('claiming-factory', () => {
       });
 
       it("should have correct claimed amount if reward has been claimed", async function () {
-        const [merkleElement, _claimingUser] = await claim(this.distributor, 30);
-        const userDetails = await client.getUserDetails(this.distributor, merkleElement.address);
-        assert.equal(userDetails.claimedAmount.toNumber(), merkleElement.amount.toNumber());
+        while (true) {
+          try {
+            const [merkleElement, _claimingUser] = await claim(this.distributor, 30);
+            const userDetails = await client.getUserDetails(this.distributor, merkleElement.address);
+            assert.equal(userDetails.claimedAmount.toNumber(), merkleElement.amount.toNumber());
+            break;
+          } catch (err: any) {
+            assert.equal(err.code, 6015);
+            await serumCmn.sleep(4000);
+          }
+        }
       });
     });
 
@@ -499,34 +517,10 @@ describe('claiming-factory', () => {
         targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUser.tokenAccount);
         assert.ok(targetWalletAccount.amount.eq(merkleElement.amount.add(firstAmount)));
       });
+    });
 
-      it("should claim correctly twice, if root has been changed to the same", async function () {
-        let [merkleElement, claimingUser] = await claim(this.distributor, 24);
-
-        const firstAmount = merkleElement.amount;
-        let targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUser.tokenAccount);
-        assert.ok(targetWalletAccount.amount.eq(firstAmount));
-
-        let data = [];
-        for (const elem of merkleData.proofs) {
-          data.push({ address: elem.address, amount: elem.amount.toNumber() * 2 });
-        }
-        let updatedMerkleData = merkle.getMerkleProof(data);
-
-        await client.updateRoot(this.distributor, updatedMerkleData.root, true);
-
-        [merkleElement, claimingUser] = await claim(this.distributor, 24, updatedMerkleData.proofs[24]);
-
-        const secondAmount = merkleElement.amount.add(firstAmount);
-        targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUser.tokenAccount);
-        assert.ok(targetWalletAccount.amount.eq(secondAmount));
-
-        await client.updateRoot(this.distributor, updatedMerkleData.root, true);
-        await claim(this.distributor, 24, updatedMerkleData.proofs[24]);
-
-        targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUser.tokenAccount);
-        assert.ok(targetWalletAccount.amount.eq(merkleElement.amount.add(secondAmount)));
-      });
+    context("complicated schedule", async function () {
+      // TODO: add tests
     });
   });
 });
