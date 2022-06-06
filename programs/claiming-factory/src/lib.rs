@@ -119,11 +119,6 @@ pub mod claiming_factory {
     pub fn update_root(ctx: Context<UpdateRoot>, args: UpdateRootArgs) -> Result<()> {
         let distributor = &mut ctx.accounts.distributor;
 
-        require!(
-            !distributor.vesting.has_started(&ctx.accounts.clock),
-            VestingAlreadyStarted
-        );
-
         distributor.merkle_root = args.merkle_root;
         distributor.merkle_index += 1;
 
@@ -409,15 +404,6 @@ impl Vesting {
 
         total_percentage_to_claim
     }
-}
-
-#[test]
-fn test() {
-    assert_eq!(Decimal::new(10000, 4).to_string(), "1.0000");
-    assert_eq!(
-        (Decimal::new(100, 4) * Decimal::new(100000, 0)).to_string(),
-        "1000.0000"
-    );
 }
 
 #[account]

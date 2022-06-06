@@ -496,6 +496,27 @@ describe('claiming-factory', () => {
           }
         );
       });
+
+      it("should claim correctly twice, if root has been changed", async function () {
+        let [merkleElement, claimingUser] = await claim(this.distributor, 25);
+
+        const firstAmount = merkleElement.amount;
+        let targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUser.tokenAccount);
+        assert.ok(targetWalletAccount.amount.eq(firstAmount));
+
+        let data = [];
+        for (const elem of merkleData.proofs) {
+          data.push({ address: elem.address, amount: elem.amount.toNumber() * 2 });
+        }
+        let updatedMerkleData = merkle.getMerkleProof(data);
+
+        await client.updateRoot(this.distributor, updatedMerkleData.root, true);
+
+        [merkleElement, claimingUser] = await claim(this.distributor, 25, updatedMerkleData.proofs[25]);
+
+        targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUser.tokenAccount);
+        assert.ok(targetWalletAccount.amount.eq(merkleElement.amount.add(firstAmount)));
+      });
     });
 
     context("complicated schedule", async function () {
