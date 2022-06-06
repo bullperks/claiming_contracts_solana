@@ -300,10 +300,10 @@ impl UserDetails {
 pub struct Period {
     /// Percentage in Basis Points (BPS). 1% = 100 BPS.
     /// NOTE: Percentage is for the whole period.
-    token_percentage: u64,
-    start_ts: u64,
-    interval_sec: u64,
-    times: u64,
+    pub token_percentage: u64,
+    pub start_ts: u64,
+    pub interval_sec: u64,
+    pub times: u64,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]

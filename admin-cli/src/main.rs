@@ -96,6 +96,8 @@ enum Command {
         merkle: String,
         #[structopt(long)]
         mint: Pubkey,
+        #[structopt(long)]
+        schedule: String,
     },
     ShowClaiming {
         #[structopt(long)]
@@ -155,9 +157,53 @@ fn main() -> Result<()> {
 
             println!("Result:\n{}", r);
         }
-        Command::CreateClaiming { merkle, mint } => {
+        Command::CreateClaiming {
+            merkle,
+            mint,
+            schedule,
+        } => {
             let merkle: MerkleData = serde_json::from_str(&merkle)?;
             println!("{:?}", merkle);
+
+            let file = std::fs::read(schedule)?;
+            let mut rdr = csv::ReaderBuilder::new()
+                .has_headers(false)
+                .from_reader(&*file);
+            let mut schedule = Vec::new();
+            for result in rdr.records() {
+                let record = result?;
+
+                let start_ts = record
+                    .get(0)
+                    .ok_or(anyhow!(
+                        "missing period start value (should be unix timestamp in seconds)"
+                    ))?
+                    .parse::<u64>()?;
+
+                let token_percentage = record
+                    .get(1)
+                    .ok_or(anyhow!(
+                        "missing token percentage value for period (in basis points)"
+                    ))?
+                    .parse::<u64>()?;
+
+                let interval_sec = record
+                    .get(2)
+                    .ok_or(anyhow!("missing interval seconds for period"))?
+                    .parse::<u64>()?;
+
+                let times = record
+                    .get(3)
+                    .ok_or(anyhow!("missing interval times for periods"))?
+                    .parse::<u64>()?;
+
+                schedule.push(claiming_factory::Period {
+                    start_ts,
+                    token_percentage,
+                    interval_sec,
+                    times,
+                });
+            }
 
             let (config, _bump) = Pubkey::find_program_address(&["config".as_ref()], &client.id());
             println!("Config address: {}", config);
@@ -205,8 +251,7 @@ fn main() -> Result<()> {
                     args: claiming_factory::InitializeArgs {
                         vault_bump,
                         merkle_root: merkle.data,
-                        // TODO: init schedule
-                        schedule: Vec::new(),
+                        schedule,
                     },
                 })
                 .signer(payer.as_ref())
