@@ -238,7 +238,7 @@ pub mod claiming_factory {
 
         let bps_to_claim = distributor
             .vesting
-            .bps_available_to_claim(&ctx.accounts.clock, &user_details);
+            .bps_available_to_claim(ctx.accounts.clock.unix_timestamp as u64, &user_details);
         let amount = (Decimal::from_u64(args.amount).unwrap() * bps_to_claim)
             .ceil()
             .to_u64()
@@ -368,8 +368,7 @@ impl Vesting {
         }
     }
 
-    fn bps_available_to_claim(&self, clock: &Sysvar<Clock>, user_details: &UserDetails) -> Decimal {
-        let now = clock.unix_timestamp as u64;
+    fn bps_available_to_claim(&self, now: u64, user_details: &UserDetails) -> Decimal {
         let mut total_percentage_to_claim = Decimal::ZERO;
 
         for period in self.schedule.iter() {
@@ -378,6 +377,12 @@ impl Vesting {
             // too early to claim
             if now < period.start_ts {
                 break;
+            }
+
+            let period_end_ts = period.start_ts + period.times * period.interval_sec;
+            if period_end_ts <= user_details.last_claimed_at_ts {
+                // skipping computations since we've already claimed
+                continue;
             }
 
             let last_claimed_at_ts_aligned_by_interval = user_details.last_claimed_at_ts

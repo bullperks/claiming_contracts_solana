@@ -54,7 +54,7 @@ describe('claiming-factory', () => {
   async function generateMerkle(): Promise<[merkle.MerkleData, ClaimingUser[]]> {
     const data = [];
     const wallets = [];
-    for (var i = 0; i < 42; i++) {
+    for (var i = 0; i < 5; i++) {
       const wallet = new anchor.Wallet(anchor.web3.Keypair.generate());
       data.push({ address: wallet.publicKey, amount: i });
       const tokenAccount = await serumCmn.createTokenAccount(provider, mint.publicKey, wallet.publicKey);
@@ -72,14 +72,45 @@ describe('claiming-factory', () => {
     return [
       {
         tokenPercentage: new anchor.BN(10000),
-        startTs: new anchor.BN(nowTs),
+        startTs: new anchor.BN(nowTs + 2),
         intervalSec: new anchor.BN(1),
         times: new anchor.BN(1),
       }
     ];
   }
 
-  async function claim(distributor: anchor.web3.PublicKey, index: number, proof?: merkle.MerkleProof): Promise<[merkle.MerkleProof, ClaimingUser]> {
+  async function setupDistributor(schedule: claiming.Period[] = mockSchedule()) {
+    const distributor = await client.createDistributor(
+      mint.publicKey,
+      merkleData.root,
+      schedule
+    );
+    const distributorAccount = await program.account.merkleDistributor.fetch(distributor);
+
+    const vault = distributorAccount.vault;
+    mint.mintTo(vault, provider.wallet.publicKey, [], 1000);
+
+    const vaultAuthority = await anchor.web3.PublicKey.createProgramAddress(
+      [
+        distributor.toBytes(),
+        [distributorAccount.vaultBump]
+      ],
+      program.programId
+    );
+
+    return {
+      distributor,
+      distributorAccount,
+      vault,
+      vaultAuthority,
+    };
+  }
+
+  async function claim(
+    distributor: anchor.web3.PublicKey,
+    index: number,
+    proof?: merkle.MerkleProof
+  ): Promise<[merkle.MerkleProof, ClaimingUser]> {
     const merkleElement = proof ? proof : merkleData.proofs[index];
     const claimingUser = claimingUsers[index];
     const elementClient = new claiming.Client(claimingUser.wallet, claiming.LOCALNET);
@@ -197,24 +228,13 @@ describe('claiming-factory', () => {
   });
 
   context('distributor', async function () {
-    beforeEach(async function () {
-      this.distributor = await client.createDistributor(
-        mint.publicKey,
-        merkleData.root,
-        mockSchedule()
-      );
-      this.distributorAccount = await program.account.merkleDistributor.fetch(this.distributor);
+    beforeEach(async function() {
+      const r = await setupDistributor();
 
-      this.vault = this.distributorAccount.vault;
-      mint.mintTo(this.vault, provider.wallet.publicKey, [], 1000);
-
-      this.vaultAuthority = await anchor.web3.PublicKey.createProgramAddress(
-        [
-          this.distributor.toBytes(),
-          [this.distributorAccount.vaultBump]
-        ],
-        program.programId
-      );
+      this.distributor = r.distributor;
+      this.distributorAccount = r.distributorAccount;
+      this.vault = r.vault;
+      this.vaultAuthority = r.vaultAuthority;
     });
 
     it('should have correct initial values', async function () {
@@ -431,7 +451,7 @@ describe('claiming-factory', () => {
       it("should have correct claimed amount if reward has been claimed", async function () {
         while (true) {
           try {
-            const [merkleElement, _claimingUser] = await claim(this.distributor, 30);
+            const [merkleElement, _claimingUser] = await claim(this.distributor, 4);
             const userDetails = await client.getUserDetails(this.distributor, merkleElement.address);
             assert.equal(userDetails.claimedAmount.toNumber(), merkleElement.amount.toNumber());
             break;
@@ -444,12 +464,158 @@ describe('claiming-factory', () => {
     });
 
     context("update schedule", async function () {
-      // TODO: add tests
+      it("should fail if changes lead to an empty schedule", async function () {
+        await assert.rejects(
+          async () => {
+            await client.updateSchedule(this.distributor, [
+              {
+                remove: {
+                  index: new anchor.BN(0)
+                }
+              }
+            ]);
+          },
+          (err) => {
+            assert.equal(err.code, 6009);
+            return true;
+          }
+        );
+      });
+
+      it("should fail if total percentage is not equal to 100% after update", async function () {
+        await assert.rejects(
+          async () => {
+            await client.updateSchedule(this.distributor, [
+              {
+                update: {
+                  index: new anchor.BN(0),
+                  period: {
+                    ...this.distributorAccount.vesting.schedule[0],
+                    ...{ tokenPercentage: new anchor.BN(11111) },
+                  }
+                }
+              }
+            ]);
+          },
+          (err) => {
+            assert.equal(err.code, 6011);
+            return true;
+          }
+        );
+      });
+
+      it("should fail if total percentage is not equal to 100% after push/remove", async function () {
+        await assert.rejects(
+          async () => {
+            await client.updateSchedule(this.distributor, [
+              {
+                push: {
+                  period: {
+                    ...this.distributorAccount.vesting.schedule[0],
+                    ...{ tokenPercentage: new anchor.BN(11111) },
+                  }
+                }
+              },
+              {
+                remove: {
+                  index: new anchor.BN(0),
+                }
+              }
+            ]);
+          },
+          (err) => {
+            assert.equal(err.code, 6011);
+            return true;
+          }
+        );
+      });
+
+      it("should fail if total percentage is not equal to 100% after push", async function () {
+        await assert.rejects(
+          async () => {
+            const changes = [
+              {
+                push: {
+                  period: {
+                    ...this.distributorAccount.vesting.schedule[0],
+                    ...{
+                      tokenPercentage: new anchor.BN(11111),
+                      startTs: this.distributorAccount.vesting.schedule[0].startTs.addn(10),
+                    },
+                  }
+                }
+              },
+            ];
+            await client.updateSchedule(this.distributor, changes);
+          },
+          (err) => {
+            assert.equal(err.code, 6011);
+            return true;
+          }
+        );
+      });
+
+      it("should fail if update messes up intervals after update", async function () {
+        await assert.rejects(
+          async () => {
+            await client.updateSchedule(this.distributor, [
+              {
+                push: {
+                  period: {
+                    ...this.distributorAccount.vesting.schedule[0],
+                    ...{
+                      startTs: this.distributorAccount.vesting.schedule[0].startTs.addn(10),
+                    }
+                  }
+                },
+              },
+              {
+                update: {
+                  index: new anchor.BN(0),
+                  period: {
+                    ...this.distributorAccount.vesting.schedule[0],
+                    ...{
+                      startTs: this.distributorAccount.vesting.schedule[0].startTs.addn(20),
+                    }
+                  }
+                }
+              },
+            ]);
+          },
+          (err) => {
+            assert.equal(err.code, 6010);
+            return true;
+          }
+        );
+      });
+
+      it("should fail if update messes up intervals after push", async function () {
+        await assert.rejects(
+          async () => {
+            await client.updateSchedule(this.distributor, [
+              {
+                push: {
+                  period: {
+                    ...this.distributorAccount.vesting.schedule[0],
+                    ...{
+                      startTs: this.distributorAccount.vesting.schedule[0].startTs.subn(10),
+                    }
+                  }
+                }
+              },
+            ]);
+          },
+          (err) => {
+            assert.equal(err.code, 6010);
+            return true;
+          }
+        );
+      });
     });
 
     context("claim", async function () {
       it("should claim correctly", async function () {
-        const [merkleElement, claimingUser] = await claim(this.distributor, 29);
+        const [merkleElement, claimingUser] = await claim(this.distributor, 3);
         const targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUser.tokenAccount);
         assert.ok(targetWalletAccount.amount.eq(merkleElement.amount));
       });
@@ -459,7 +625,7 @@ describe('claiming-factory', () => {
 
         await assert.rejects(
           async () => {
-            await claim(this.distributor, 30);
+            await claim(this.distributor, 4);
           },
           (err) => {
             assert.equal(err.code, 6008);
@@ -471,9 +637,9 @@ describe('claiming-factory', () => {
       it("should fail if merkle proof is not correct", async function () {
         await assert.rejects(
           async () => {
-            await claim(this.distributor, 30, {
-              ...merkleData.proofs[30],
-              ...{ proofs: merkleData.proofs[29].proofs },
+            await claim(this.distributor, 4, {
+              ...merkleData.proofs[4],
+              ...{ proofs: merkleData.proofs[3].proofs },
             });
           },
           (err) => {
@@ -484,11 +650,11 @@ describe('claiming-factory', () => {
       });
 
       it("shouldn't claim if reward has been claimed", async function () {
-        await claim(this.distributor, 30);
+        await claim(this.distributor, 4);
 
         await assert.rejects(
           async () => {
-            await claim(this.distributor, 30);
+            await claim(this.distributor, 4);
           },
           (err) => {
             assert.equal(err.code, 6004);
@@ -498,7 +664,7 @@ describe('claiming-factory', () => {
       });
 
       it("should claim correctly twice, if root has been changed", async function () {
-        let [merkleElement, claimingUser] = await claim(this.distributor, 25);
+        let [merkleElement, claimingUser] = await claim(this.distributor, 2);
 
         const firstAmount = merkleElement.amount;
         let targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUser.tokenAccount);
@@ -512,7 +678,7 @@ describe('claiming-factory', () => {
 
         await client.updateRoot(this.distributor, updatedMerkleData.root, true);
 
-        [merkleElement, claimingUser] = await claim(this.distributor, 25, updatedMerkleData.proofs[25]);
+        [merkleElement, claimingUser] = await claim(this.distributor, 2, updatedMerkleData.proofs[2]);
 
         targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUser.tokenAccount);
         assert.ok(targetWalletAccount.amount.eq(merkleElement.amount.add(firstAmount)));
@@ -520,7 +686,37 @@ describe('claiming-factory', () => {
     });
 
     context("complicated schedule", async function () {
-      // TODO: add tests
+      it("should claim in two attempts", async function () {
+        const r = await setupDistributor([
+          {
+            tokenPercentage: new anchor.BN(5000),
+            startTs: new anchor.BN(Date.now() / 1000),
+            intervalSec: new anchor.BN(1),
+            times: new anchor.BN(1),
+          },
+          {
+            tokenPercentage: new anchor.BN(5000),
+            startTs: new anchor.BN(Date.now() / 1000 + 16),
+            intervalSec: new anchor.BN(1),
+            times: new anchor.BN(1),
+          }
+        ]);
+
+        let targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUsers[2].tokenAccount);
+        const beforeClaimAmount = targetWalletAccount.amount;
+
+        const [merkleElement, claimingUser] = await claim(r.distributor, 2);
+
+        targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUser.tokenAccount);
+        console.log(targetWalletAccount.amount.toNumber(), merkleElement.amount.toNumber());
+        assert.ok(targetWalletAccount.amount.sub(beforeClaimAmount).eq(merkleElement.amount.divn(2)));
+
+        await claim(r.distributor, 2);
+
+        targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUser.tokenAccount);
+        console.log(targetWalletAccount.amount.toNumber());
+        assert.ok(targetWalletAccount.amount.sub(beforeClaimAmount).eq(merkleElement.amount));
+      });
     });
   });
 });

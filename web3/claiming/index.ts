@@ -249,6 +249,23 @@ export class Client {
     );
   }
 
+  async updateSchedule(distributor: anchor.web3.PublicKey, changes: any[]) {
+    const [config, _bump] = await this.findConfigAddress();
+    await this.program.rpc.updateSchedule(
+      {
+        changes
+      },
+      {
+        accounts: {
+          distributor,
+          config,
+          adminOrOwner: this.provider.wallet.publicKey,
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+        }
+      }
+    );
+  }
+
   async findUserDetailsAddress(
     distributor: anchor.web3.PublicKey,
     user: anchor.web3.PublicKey
