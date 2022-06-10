@@ -38,6 +38,7 @@ export type Period = {
   startTs: anchor.BN,
   intervalSec: anchor.BN,
   times: anchor.BN,
+  airdropped: boolean,
 };
 
 export type UserDetails = {

@@ -75,6 +75,7 @@ describe('claiming-factory', () => {
         startTs: new anchor.BN(nowTs + 2),
         intervalSec: new anchor.BN(1),
         times: new anchor.BN(1),
+        airdropped: false,
       }
     ];
   }
@@ -228,7 +229,7 @@ describe('claiming-factory', () => {
   });
 
   context('distributor', async function () {
-    beforeEach(async function() {
+    beforeEach(async function () {
       const r = await setupDistributor();
 
       this.distributor = r.distributor;
@@ -693,12 +694,14 @@ describe('claiming-factory', () => {
             startTs: new anchor.BN(Date.now() / 1000),
             intervalSec: new anchor.BN(1),
             times: new anchor.BN(1),
+            airdropped: false,
           },
           {
             tokenPercentage: new anchor.BN(5000),
             startTs: new anchor.BN(Date.now() / 1000 + 16),
             intervalSec: new anchor.BN(1),
             times: new anchor.BN(1),
+            airdropped: false,
           }
         ]);
 
@@ -716,6 +719,44 @@ describe('claiming-factory', () => {
         targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUser.tokenAccount);
         console.log(targetWalletAccount.amount.toNumber());
         assert.ok(targetWalletAccount.amount.sub(beforeClaimAmount).eq(merkleElement.amount));
+      });
+
+      it("should claim but skip airdropped section", async function () {
+        const r = await setupDistributor([
+          {
+            tokenPercentage: new anchor.BN(5000),
+            startTs: new anchor.BN(Date.now() / 1000),
+            intervalSec: new anchor.BN(1),
+            times: new anchor.BN(1),
+            airdropped: true,
+          },
+          {
+            tokenPercentage: new anchor.BN(5000),
+            startTs: new anchor.BN(Date.now() / 1000 + 3),
+            intervalSec: new anchor.BN(1),
+            times: new anchor.BN(1),
+            airdropped: false,
+          }
+        ]);
+
+        let targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUsers[2].tokenAccount);
+        const beforeClaimAmount = targetWalletAccount.amount;
+
+        const [merkleElement, claimingUser] = await claim(r.distributor, 2);
+
+        targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUser.tokenAccount);
+        console.log(targetWalletAccount.amount.toNumber(), merkleElement.amount.toNumber());
+        assert.ok(targetWalletAccount.amount.sub(beforeClaimAmount).eq(merkleElement.amount.divn(2)));
+
+        await assert.rejects(
+          async () => {
+            await claim(r.distributor, 2);
+          },
+          (err) => {
+            assert.equal(err.code, 6004);
+            return true;
+          }
+        );
       });
     });
   });

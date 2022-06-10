@@ -2,7 +2,10 @@ use std::ops::DerefMut;
 
 use anchor_lang::{
     prelude::*,
-    solana_program::{keccak, log::sol_log_64},
+    solana_program::{
+        keccak,
+        log::{sol_log, sol_log_64},
+    },
 };
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 use rust_decimal::{
@@ -236,10 +239,15 @@ pub mod claiming_factory {
 
         require!(computed_hash == distributor.merkle_root, InvalidProof);
 
-        let bps_to_claim = distributor
+        let (bps_to_claim, bps_to_add) = distributor
             .vesting
             .bps_available_to_claim(ctx.accounts.clock.unix_timestamp as u64, &user_details);
         let amount = (Decimal::from_u64(args.amount).unwrap() * bps_to_claim)
+            .ceil()
+            .to_u64()
+            .unwrap();
+        // this amount is from airdropped periods
+        let amount_to_add = (Decimal::from_u64(args.amount).unwrap() * bps_to_add)
             .ceil()
             .to_u64()
             .unwrap();
@@ -259,7 +267,9 @@ pub mod claiming_factory {
         }
         .make()?;
 
-        user_details.claimed_amount = amount;
+        user_details.claimed_amount += amount;
+        user_details.claimed_amount += amount_to_add;
+
         user_details.last_claimed_at_ts = ctx.accounts.clock.unix_timestamp as u64;
 
         emit!(Claimed {
@@ -304,6 +314,9 @@ pub struct Period {
     pub start_ts: u64,
     pub interval_sec: u64,
     pub times: u64,
+    /// We should skip this in claim amount calculation
+    /// because it has been claimed outside of this vesting scope.
+    pub airdropped: bool,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
@@ -368,20 +381,27 @@ impl Vesting {
         }
     }
 
-    fn bps_available_to_claim(&self, now: u64, user_details: &UserDetails) -> Decimal {
+    fn bps_available_to_claim(&self, now: u64, user_details: &UserDetails) -> (Decimal, Decimal) {
         let mut total_percentage_to_claim = Decimal::ZERO;
+        let mut total_percentage_to_add = Decimal::ZERO;
 
         for period in self.schedule.iter() {
-            sol_log_64(now, period.start_ts, 0, 0, 0);
+            sol_log_64(now, period.start_ts, user_details.last_claimed_at_ts, 0, 0);
 
-            // too early to claim
             if now < period.start_ts {
+                sol_log("too early to claim period");
                 break;
             }
 
             let period_end_ts = period.start_ts + period.times * period.interval_sec;
             if period_end_ts <= user_details.last_claimed_at_ts {
-                // skipping computations since we've already claimed
+                sol_log("skip since we've already claimed");
+                continue;
+            }
+
+            if period.airdropped {
+                sol_log("this period was airdropped");
+                total_percentage_to_add += Decimal::new(period.token_percentage as i64, 4);
                 continue;
             }
 
@@ -407,7 +427,7 @@ impl Vesting {
             total_percentage_to_claim += percentage_for_intervals;
         }
 
-        total_percentage_to_claim
+        (total_percentage_to_claim, total_percentage_to_add)
     }
 }
 

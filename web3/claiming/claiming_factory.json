@@ -450,6 +450,10 @@
           {
             "name": "times",
             "type": "u64"
+          },
+          {
+            "name": "airdropped",
+            "type": "bool"
           }
         ]
       }

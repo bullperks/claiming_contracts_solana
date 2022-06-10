@@ -197,11 +197,17 @@ fn main() -> Result<()> {
                     .ok_or(anyhow!("missing interval times for periods"))?
                     .parse::<u64>()?;
 
+                let airdropped = record
+                    .get(4)
+                    .ok_or(anyhow!("missing airdropped flag"))?
+                    .parse::<bool>()?;
+
                 schedule.push(claiming_factory::Period {
                     start_ts,
                     token_percentage,
                     interval_sec,
                     times,
+                    airdropped,
                 });
             }
 

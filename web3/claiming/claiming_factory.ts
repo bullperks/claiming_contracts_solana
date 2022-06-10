@@ -450,6 +450,10 @@ export type ClaimingFactory = {
           {
             "name": "times",
             "type": "u64"
+          },
+          {
+            "name": "airdropped",
+            "type": "bool"
           }
         ]
       }
@@ -1185,6 +1189,10 @@ export const IDL: ClaimingFactory = {
           {
             "name": "times",
             "type": "u64"
+          },
+          {
+            "name": "airdropped",
+            "type": "bool"
           }
         ]
       }
