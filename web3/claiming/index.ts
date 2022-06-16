@@ -60,7 +60,11 @@ export class Client {
     this.program = this.initProgram();
   }
 
-  /* create the provider and return it to the caller */
+  /**
+   * Creates the provider and returns it to the caller
+   * @param {anchor.Wallet} wallet - the solana wallet
+   * @returns {anchor.Provider} Returns the provider
+   */
   getProvider(wallet: anchor.Wallet): anchor.Provider {
     let network: string;
     switch (this.networkName) {
@@ -77,6 +81,10 @@ export class Client {
     return provider;
   }
 
+  /**
+   * Initializes the program using program's idl for every network
+   * @returns {anchor.Program} Returns the initialized program
+   */
   initProgram(): anchor.Program<ty.ClaimingFactory> {
     switch (this.networkName) {
       case LOCALNET:
@@ -90,6 +98,10 @@ export class Client {
     }
   }
 
+  /**
+   * Find a valid program address of config account
+   * @returns {Promise<[anchor.web3.PublicKey, number]>} Returns the public key of config and the bump number
+   */
   async findConfigAddress(): Promise<[anchor.web3.PublicKey, number]> {
     const [config, bump] = await anchor.web3.PublicKey.findProgramAddress(
       [
@@ -100,6 +112,10 @@ export class Client {
     return [config, bump];
   }
 
+  /**
+   * Initializes config
+   * @returns {Promise<anchor.web3.PublicKey>} Returns the public key of config
+   */
   async createConfig() {
     const [config, bump] = await this.findConfigAddress();
 
@@ -117,6 +133,11 @@ export class Client {
     return config;
   }
 
+  /**
+   * Find a program address of vault authority
+   * @param {anchor.web3.PublicKey} distributor - public key of distributor
+   * @returns {Promise<[anchor.web3.PublicKey, number]>} Returns the public key of vault authority and the bump number
+   */
   async findVaultAuthority(distributor: anchor.web3.PublicKey): Promise<[anchor.web3.PublicKey, number]> {
     const [vaultAuthority, vaultBump] = await anchor.web3.PublicKey.findProgramAddress(
       [
@@ -127,6 +148,13 @@ export class Client {
     return [vaultAuthority, vaultBump];
   }
 
+  /**
+   * Initializes distributor
+   * @param {anchor.web3.PublicKey} mint - public key of mint to distibute
+   * @param {number[]} merkleRoot
+   * @param {Period[]} schedule - token distribution data (amount, time)
+   * @returns {Promise<anchor.web3.PublicKey>} Returns the public key of newly created distributor
+   */
   async createDistributor(mint: anchor.web3.PublicKey, merkleRoot: number[], schedule: Period[]): Promise<anchor.web3.PublicKey> {
     const distributor = anchor.web3.Keypair.generate();
     const [vaultAuthority, vaultBump] = await this.findVaultAuthority(distributor.publicKey);
@@ -163,6 +191,10 @@ export class Client {
     return distributor.publicKey;
   }
 
+  /**
+   * Adds admin
+   * @param {anchor.web3.PublicKey} admin - public key of new admin
+   */
   async addAdmin(admin: anchor.web3.PublicKey) {
     const [config, _bump] = await this.findConfigAddress();
     await this.program.rpc.addAdmin(
@@ -176,6 +208,10 @@ export class Client {
     );
   }
 
+  /**
+   * Removes admin
+   * @param {anchor.web3.PublicKey} admin - public key of removing admin
+   */
   async removeAdmin(admin: anchor.web3.PublicKey) {
     const [config, _bump] = await this.findConfigAddress();
     await this.program.rpc.removeAdmin(
@@ -189,14 +225,27 @@ export class Client {
     );
   }
 
+  /**
+   * Pause distributor
+   * @param {anchor.web3.PublicKey} distributor - public key of pausing distributor
+   */
   async pause(distributor: anchor.web3.PublicKey) {
     await this.setPaused(distributor, true);
   }
 
+  /**
+   * Unpause distributor
+   * @param {anchor.web3.PublicKey} distributor - public key of unpausing distributor
+   */
   async unpause(distributor: anchor.web3.PublicKey) {
     await this.setPaused(distributor, false);
   }
 
+  /**
+   * Pause or unpause distributor (only for admin role)
+   * @param {anchor.web3.PublicKey} distributor - public key of pausing/unpausing distributor
+   * @param {boolean} paused - new status for pausing
+   */
   async setPaused(distributor: anchor.web3.PublicKey, paused: boolean) {
     const [config, _bump] = await this.findConfigAddress();
     await this.program.rpc.setPaused(
@@ -211,6 +260,12 @@ export class Client {
     );
   }
 
+  /**
+   * Withdraws tokens after claim period on target wallet
+   * @param {anchor.BN} amount - amount to withdraw
+   * @param {anchor.web3.PublicKey} distributor - public key of distributor, on which tokes were claimed
+   * @param {anchor.web3.PublicKey} targetWallet - public key of wallet, on which tokens withdraw
+   */
   async withdrawTokens(amount: anchor.BN, distributor: anchor.web3.PublicKey, targetWallet: anchor.web3.PublicKey) {
     const distributorAccount = await this.program.account.merkleDistributor.fetch(distributor);
     const [config, _bump] = await this.findConfigAddress();
@@ -231,6 +286,12 @@ export class Client {
     );
   }
 
+  /**
+   * Updates merkle root
+   * @param {anchor.web3.PublicKey} distributor - public key of distributor, on which tokes were claimed
+   * @param {number[]} merkleRoot - new merkle root to set
+   * @param {boolean} unpause (optional) - pause/unpause status
+   */
   async updateRoot(distributor: anchor.web3.PublicKey, merkleRoot: number[], unpause?: boolean) {
     const [config, _bump] = await this.findConfigAddress();
     unpause = (unpause === undefined) ? false : unpause;
@@ -250,6 +311,11 @@ export class Client {
     );
   }
 
+  /**
+   * Updates shedule
+   * @param {anchor.web3.PublicKey} distributor - public key of distributor, on which tokes were claimed
+   * @param {any[]} changes - new shedule data
+   */
   async updateSchedule(distributor: anchor.web3.PublicKey, changes: any[]) {
     const [config, _bump] = await this.findConfigAddress();
     await this.program.rpc.updateSchedule(
@@ -267,6 +333,12 @@ export class Client {
     );
   }
 
+  /**
+   * Finds public key of data about user
+   * @param {anchor.web3.PublicKey} distributor - public key of distributor, on which tokes were claimed
+   * @param {anchor.web3.PublicKey} user - public key of user, which data is finding
+   * @returns {Promise<[anchor.web3.PublicKey, number]>} Returns the public key of user details account and the bump
+   */
   async findUserDetailsAddress(
     distributor: anchor.web3.PublicKey,
     user: anchor.web3.PublicKey
@@ -284,6 +356,12 @@ export class Client {
     return [userDetails, bump];
   }
 
+  /**
+   * Initializes user details
+   * @param {anchor.web3.PublicKey} distributor - public key of distributor, on which tokes were claimed
+   * @param {anchor.web3.PublicKey} user - public key of user, which data is finding
+   * @returns {Promise<anchor.web3.PublicKey>} Returns the public key of user details account
+   */
   async initUserDetails(
     distributor: anchor.web3.PublicKey,
     user: anchor.web3.PublicKey
@@ -309,6 +387,12 @@ export class Client {
     return userDetails;
   }
 
+  /**
+   * Gets user details data
+   * @param {anchor.web3.PublicKey} distributor - public key of distributor, on which tokes were claimed
+   * @param {anchor.web3.PublicKey} user - public key of user, which data is finding
+   * @returns {Promise<UserDetails | null>} Returns data about user claims (amount, time) or null if err
+   */
   async getUserDetails(
     distributor: anchor.web3.PublicKey,
     user: anchor.web3.PublicKey
@@ -328,6 +412,13 @@ export class Client {
     }
   }
 
+  /**
+   * Claims amount of tokens
+   * @param {anchor.web3.PublicKey} distributor - public key of distributor, on which tokes would be claimed
+   * @param {anchor.web3.PublicKey} targetWallet - wallet of user, which will withdraw tokens
+   * @param {anchor.BN} amount - amount of tokens to claim
+   * @param {number[][]} merkleProof - merkle proof
+   */
   async claim(
     distributor: anchor.web3.PublicKey,
     targetWallet: anchor.web3.PublicKey,
