@@ -13,7 +13,7 @@ use rust_decimal::{
     Decimal,
 };
 
-declare_id!("3yELWiEQynmnXAavxAuQC9RDA4VoVkJeZSvX5a6P4Vvs");
+declare_id!("6cJU4mUJe1fKXzvvbZjz72M3d5aQXMmRV2jeQerkFw5b");
 
 #[error_code]
 pub enum ErrorCode {

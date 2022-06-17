@@ -1,5 +1,8 @@
 [programs.localnet]
-claiming_factory = "3yELWiEQynmnXAavxAuQC9RDA4VoVkJeZSvX5a6P4Vvs"
+claiming_factory = "6cJU4mUJe1fKXzvvbZjz72M3d5aQXMmRV2jeQerkFw5b"
+
+[programs.devnet]
+claiming_factory = "6cJU4mUJe1fKXzvvbZjz72M3d5aQXMmRV2jeQerkFw5b"
 
 [registry]
 url = "https://anchor.projectserum.com"
