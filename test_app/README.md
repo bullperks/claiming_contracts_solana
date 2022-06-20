@@ -2,6 +2,19 @@
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
+## Environment variables
+
+Create `.env` file with the following variables:
+
+`GENERATE_SOURCEMAP=false` - removes some test app errors\
+`REACT_APP_NETWORK` - solana cluster (localnet / devnet / testnet / mainnet-beta)\
+`REACT_APP_CLAIMING_PROGRAM_ID` - id of deployed claiming program\
+`REACT_APP_OWNER_SEED` - mnemonic phrase of wallet with owner role. owner is a claiming program creator. \
+`REACT_APP_ADMIN_SEED` - mnemonic phrase of wallet with admin role. admin is a claiming creator.\
+`REACT_APP_USER_MNEMONIC` - mnemonic phrase of wallet with user (no admin, no owner) role\
+
+**Note: you need to have some Sol on balance of each wallet**
+
 ## Available Scripts
 
 In the project directory, you can run:
@@ -38,9 +51,3 @@ If you aren’t satisfied with the build tool and configuration choices, you can
 Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
 
 You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
