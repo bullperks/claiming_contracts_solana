@@ -21,8 +21,8 @@ export const DEVNET = 'devnet';
 export const TESTNET = 'testnet';
 export const MAINNET = 'mainnet-beta';
 
-const LOCALNET_PROGRAM_ID = "3yELWiEQynmnXAavxAuQC9RDA4VoVkJeZSvX5a6P4Vvs";
-const DEVNET_PROGRAM_ID = "3yELWiEQynmnXAavxAuQC9RDA4VoVkJeZSvX5a6P4Vvs";
+const LOCALNET_PROGRAM_ID = "6cJU4mUJe1fKXzvvbZjz72M3d5aQXMmRV2jeQerkFw5b";
+const DEVNET_PROGRAM_ID = "6cJU4mUJe1fKXzvvbZjz72M3d5aQXMmRV2jeQerkFw5b";
 // TODO: change address to actual testnet program address
 const TESTNET_PROGRAM_ID = "3yELWiEQynmnXAavxAuQC9RDA4VoVkJeZSvX5a6P4Vvs";
 // TODO: change address to actual mainnet program address
