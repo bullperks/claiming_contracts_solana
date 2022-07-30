@@ -55,6 +55,7 @@ const FAILED_TO_FIND_ACCOUNT = "Account does not exist";
 
 export class Client {
   provider: anchor.AnchorProvider;
+  serumProvider: serumCmn.Provider;
   networkName: NetworkName;
   program: anchor.Program<ty.ClaimingFactory>;
 
@@ -62,6 +63,7 @@ export class Client {
     this.networkName = networkName;
     this.provider = this.getProvider(wallet);
     this.program = this.initProgram();
+    this.serumProvider = new serumCmn.Provider(this.provider.connection, this.provider.wallet, opts);
   }
 
   /**
