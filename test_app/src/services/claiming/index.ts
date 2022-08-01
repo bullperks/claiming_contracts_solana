@@ -356,7 +356,7 @@ export class Client {
     const [userDetails, bump] = await anchor.web3.PublicKey.findProgramAddress(
       [
         distributor.toBytes(),
-        distributorAccount.merkleIndex.toBuffer('be', 8),
+        distributorAccount.merkleIndex.toArray('be', 8),
         user.toBytes(),
       ],
       this.program.programId
