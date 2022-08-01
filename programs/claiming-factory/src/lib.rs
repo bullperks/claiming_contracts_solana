@@ -33,6 +33,7 @@ pub enum ErrorCode {
     IntegerOverflow,
     VestingAlreadyStarted,
     NothingToClaim,
+    InvalidIntervalDuration,
 }
 
 /// This event is triggered whenever a call to claim succeeds.
@@ -341,6 +342,7 @@ impl Vesting {
 
         for entry in &self.schedule {
             require!(entry.times > 0, EmptyPeriod);
+            require!(entry.interval_sec > 0, InvalidIntervalDuration);
             require!(last_start_ts < entry.start_ts, InvalidScheduleOrder);
 
             // start_ts + (times * interval_sec)
