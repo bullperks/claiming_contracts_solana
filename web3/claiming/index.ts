@@ -1,6 +1,7 @@
 import * as anchor from '@project-serum/anchor';
 import * as serumCmn from "@project-serum/common";
 import { TokenInstructions } from '@project-serum/serum';
+import { Decimal } from 'decimal.js';
 
 import * as idl from './claiming_factory.json';
 import * as ty from './claiming_factory';
@@ -410,6 +411,50 @@ export class Client {
         throw err;
       }
     }
+  }
+
+  async getAmountAvailableToClaim(
+    distributor: anchor.web3.PublicKey,
+    user: anchor.web3.PublicKey,
+    totalAmount: number
+  ) {
+    const userDetails = await this.getUserDetails(distributor, user);
+    const distributorAccount = await this.program.account.merkleDistributor.fetch(distributor);
+
+    const now = Math.trunc(Date.now() / 1000);
+    let totalPercentageToClaim = new Decimal(0);
+
+    const lastClaimedAtTs = userDetails.lastClaimedAtTs.toNumber();
+
+    for (const period of distributorAccount.vesting.schedule) {
+      let periodStartTs = period.startTs.toNumber();
+      let periodTimes = period.times.toNumber();
+
+      if (now < periodStartTs) {
+        break;
+      }
+
+      let periodEndTs = periodStartTs + periodTimes * period.intervalSec.toNumber();
+      if (periodEndTs <= lastClaimedAtTs) {
+        continue;
+      }
+
+      let lastClaimedAtTsAlignedByInterval = lastClaimedAtTs - (lastClaimedAtTs % period.intervalSec.toNumber());
+      let secondsPassed =
+        now - (periodStartTs >= lastClaimedAtTsAlignedByInterval ?
+          periodStartTs : lastClaimedAtTsAlignedByInterval
+        );
+      let intervalsPassed = secondsPassed / period.intervalSec;
+      intervalsPassed = intervalsPassed < periodTimes ? intervalsPassed : periodTimes;
+
+      let percentageForIntervals = new Decimal(period.tokenPercentage.divn(100).toString())
+        .dividedBy(periodTimes)
+        .mul(intervalsPassed);
+
+      totalPercentageToClaim = totalPercentageToClaim.add(percentageForIntervals);
+    }
+
+    return totalPercentageToClaim.mul(totalAmount).div(100).toNumber();
   }
 
   /**

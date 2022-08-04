@@ -119,6 +119,15 @@ describe('claiming-factory', () => {
 
     while (true) {
       try {
+        console.log(
+          "available to claim",
+          await elementClient.getAmountAvailableToClaim(
+            distributor,
+            claimingUser.wallet.publicKey,
+            merkleElement.amount.toNumber()
+          )
+        );
+
         await elementClient.claim(
           distributor,
           claimingUser.tokenAccount,
@@ -711,13 +720,13 @@ describe('claiming-factory', () => {
         const [merkleElement, claimingUser] = await claim(r.distributor, 2);
 
         targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUser.tokenAccount);
-        console.log(targetWalletAccount.amount.toNumber(), merkleElement.amount.toNumber());
+        console.log("first attempt", targetWalletAccount.amount.toNumber(), merkleElement.amount.toNumber());
         assert.ok(targetWalletAccount.amount.sub(beforeClaimAmount).eq(merkleElement.amount.divn(2)));
 
         await claim(r.distributor, 2);
 
         targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUser.tokenAccount);
-        console.log(targetWalletAccount.amount.toNumber());
+        console.log("second attempt", targetWalletAccount.amount.toNumber());
         assert.ok(targetWalletAccount.amount.sub(beforeClaimAmount).eq(merkleElement.amount));
       });
 
