@@ -418,22 +418,18 @@ export class Client {
     user: anchor.web3.PublicKey,
     totalAmount: number
   ) {
-    let userDetails;
+    let lastClaimedAtTs;
 
     try {
-      userDetails = await this.getUserDetails(distributor, user);
+      lastClaimedAtTs = (await this.getUserDetails(distributor, user)).lastClaimedAtTs.toNumber();
     } catch {
-      userDetails = {
-        lastClaimedAtTs: new anchor.BN(0),
-      };
+      lastClaimedAtTs = 0;
     };
 
     const distributorAccount = await this.program.account.merkleDistributor.fetch(distributor);
 
     const now = Math.trunc(Date.now() / 1000);
     let totalPercentageToClaim = new Decimal(0);
-
-    const lastClaimedAtTs = userDetails.lastClaimedAtTs.toNumber();
 
     for (const period of distributorAccount.vesting.schedule) {
       let periodStartTs = period.startTs.toNumber();
