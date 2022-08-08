@@ -418,7 +418,16 @@ export class Client {
     user: anchor.web3.PublicKey,
     totalAmount: number
   ) {
-    const userDetails = await this.getUserDetails(distributor, user);
+    let userDetails;
+
+    try {
+      userDetails = await this.getUserDetails(distributor, user);
+    } catch {
+      userDetails = {
+        lastClaimedAtTs: new anchor.BN(0),
+      };
+    };
+
     const distributorAccount = await this.program.account.merkleDistributor.fetch(distributor);
 
     const now = Math.trunc(Date.now() / 1000);
