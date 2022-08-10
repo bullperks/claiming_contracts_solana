@@ -71,7 +71,7 @@ describe('claiming-factory', () => {
     const nowTs = Date.now() / 1000;
     return [
       {
-        tokenPercentage: new anchor.BN(10000),
+        tokenPercentage: new anchor.BN(100_000_000_000),
         startTs: new anchor.BN(nowTs + 2),
         intervalSec: new anchor.BN(1),
         times: new anchor.BN(1),
@@ -699,14 +699,14 @@ describe('claiming-factory', () => {
       it("should claim in two attempts", async function () {
         const r = await setupDistributor([
           {
-            tokenPercentage: new anchor.BN(5000),
+            tokenPercentage: new anchor.BN(50_000_000_000),
             startTs: new anchor.BN(Date.now() / 1000),
             intervalSec: new anchor.BN(1),
             times: new anchor.BN(1),
             airdropped: false,
           },
           {
-            tokenPercentage: new anchor.BN(5000),
+            tokenPercentage: new anchor.BN(50_000_000_000),
             startTs: new anchor.BN(Date.now() / 1000 + 16),
             intervalSec: new anchor.BN(1),
             times: new anchor.BN(1),
@@ -733,14 +733,14 @@ describe('claiming-factory', () => {
       it("should claim but skip airdropped section", async function () {
         const r = await setupDistributor([
           {
-            tokenPercentage: new anchor.BN(5000),
+            tokenPercentage: new anchor.BN(50_000_000_000),
             startTs: new anchor.BN(Date.now() / 1000),
             intervalSec: new anchor.BN(1),
             times: new anchor.BN(1),
             airdropped: true,
           },
           {
-            tokenPercentage: new anchor.BN(5000),
+            tokenPercentage: new anchor.BN(50_000_000_000),
             startTs: new anchor.BN(Date.now() / 1000 + 3),
             intervalSec: new anchor.BN(1),
             times: new anchor.BN(1),

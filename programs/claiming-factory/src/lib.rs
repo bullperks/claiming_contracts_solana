@@ -307,9 +307,11 @@ impl UserDetails {
     pub const LEN: usize = 8 + std::mem::size_of::<Self>();
 }
 
+const DECIMALS: u32 = 9;
+
 #[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
 pub struct Period {
-    /// Percentage in Basis Points (BPS). 1% = 100 BPS.
+    /// Percentage in kinda Basis Points (BPS). 1% = 1_000_000_000 BPS.
     /// NOTE: Percentage is for the whole period.
     pub token_percentage: u64,
     pub start_ts: u64,
@@ -356,8 +358,11 @@ impl Vesting {
             total_percentage += entry.token_percentage;
         }
 
-        // 100% == 10000 basis points
-        require!(total_percentage == 10000, PercentageDoesntCoverAllTokens);
+        // 100% == 100_000_000_000 basis points
+        require!(
+            total_percentage == 100 * 10u64.pow(DECIMALS),
+            PercentageDoesntCoverAllTokens
+        );
 
         Ok(())
     }
@@ -422,9 +427,10 @@ impl Vesting {
                 intervals_passed,
             );
 
-            let percentage_for_intervals = (Decimal::new(period.token_percentage as i64, 4)
-                / Decimal::from_u64(period.times).unwrap())
-                * Decimal::from_u64(intervals_passed).unwrap();
+            let percentage_for_intervals =
+                (Decimal::new(period.token_percentage as i64, DECIMALS + 2)
+                    / Decimal::from_u64(period.times).unwrap())
+                    * Decimal::from_u64(intervals_passed).unwrap();
 
             total_percentage_to_claim += percentage_for_intervals;
         }
