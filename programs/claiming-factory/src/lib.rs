@@ -166,7 +166,7 @@ pub mod claiming_factory {
         }
 
         for admin_slot in config.admins.iter_mut() {
-            if let None = admin_slot {
+            if admin_slot.is_none() {
                 *admin_slot = Some(admin.key());
                 return Ok(());
             }
@@ -272,7 +272,10 @@ pub mod claiming_factory {
 
                 require!(expected_addr == actual_wallet.key(), WrongClaimer);
                 require!(actual_wallet.original == args.original_wallet, WrongClaimer);
-                require!(actual_wallet.actual == ctx.accounts.user.key(), WrongClaimer);
+                require!(
+                    actual_wallet.actual == ctx.accounts.user.key(),
+                    WrongClaimer
+                );
             }
             None => {
                 require!(
@@ -304,7 +307,7 @@ pub mod claiming_factory {
 
         let (bps_to_claim, bps_to_add) = distributor
             .vesting
-            .bps_available_to_claim(ctx.accounts.clock.unix_timestamp as u64, &user_details);
+            .bps_available_to_claim(ctx.accounts.clock.unix_timestamp as u64, user_details);
         let amount = (Decimal::from_u64(args.amount).unwrap() * bps_to_claim)
             .ceil()
             .to_u64()
@@ -399,7 +402,7 @@ impl Vesting {
     }
 
     fn validate(&self) -> Result<()> {
-        require!(self.schedule.len() > 0, EmptySchedule);
+        require!(!self.schedule.is_empty(), EmptySchedule);
 
         let mut last_start_ts = 0;
         let mut total_percentage = 0;
