@@ -127,7 +127,10 @@ pub mod claiming_factory {
         let distributor = &mut ctx.accounts.distributor;
 
         distributor.merkle_root = args.merkle_root;
-        distributor.merkle_index += 1;
+        distributor.merkle_index = distributor
+            .merkle_index
+            .checked_add(1)
+            .ok_or(ErrorCode::IntegerOverflow)?;
 
         emit!(MerkleRootUpdated {
             merkle_index: distributor.merkle_index,
@@ -405,7 +408,7 @@ impl Vesting {
         require!(!self.schedule.is_empty(), EmptySchedule);
 
         let mut last_start_ts = 0;
-        let mut total_percentage = 0;
+        let mut total_percentage: u64 = 0;
 
         for entry in &self.schedule {
             require!(entry.times > 0, EmptyPeriod);
@@ -420,7 +423,9 @@ impl Vesting {
                 .checked_add(entry.start_ts)
                 .ok_or(ErrorCode::IntegerOverflow)?;
 
-            total_percentage += entry.token_percentage;
+            total_percentage = total_percentage
+                .checked_add(entry.token_percentage)
+                .ok_or(ErrorCode::IntegerOverflow)?;
         }
 
         // 100% == 100_000_000_000 basis points
