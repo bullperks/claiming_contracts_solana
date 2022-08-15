@@ -288,6 +288,83 @@ export type ClaimingFactory = {
       ]
     },
     {
+      "name": "initActualWallet",
+      "accounts": [
+        {
+          "name": "distributor",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "user",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "actualWallet",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "bump",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "changeWallet",
+      "accounts": [
+        {
+          "name": "distributor",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "user",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "userDetails",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "newWallet",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "newUserDetails",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "actualWallet",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "bump",
+          "type": "u8"
+        }
+      ]
+    },
+    {
       "name": "claim",
       "accounts": [
         {
@@ -381,6 +458,26 @@ export type ClaimingFactory = {
           {
             "name": "claimedAmount",
             "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "actualWallet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "original",
+            "type": "publicKey"
+          },
+          {
+            "name": "actual",
+            "type": "publicKey"
           },
           {
             "name": "bump",
@@ -559,6 +656,10 @@ export type ClaimingFactory = {
                 ]
               }
             }
+          },
+          {
+            "name": "originalWallet",
+            "type": "publicKey"
           }
         ]
       }
@@ -733,6 +834,14 @@ export type ClaimingFactory = {
     {
       "code": 6015,
       "name": "NothingToClaim"
+    },
+    {
+      "code": 6016,
+      "name": "InvalidIntervalDuration"
+    },
+    {
+      "code": 6017,
+      "name": "WrongClaimer"
     }
   ]
 };
@@ -1027,6 +1136,83 @@ export const IDL: ClaimingFactory = {
       ]
     },
     {
+      "name": "initActualWallet",
+      "accounts": [
+        {
+          "name": "distributor",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "user",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "actualWallet",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "bump",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "changeWallet",
+      "accounts": [
+        {
+          "name": "distributor",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "user",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "userDetails",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "newWallet",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "newUserDetails",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "actualWallet",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "bump",
+          "type": "u8"
+        }
+      ]
+    },
+    {
       "name": "claim",
       "accounts": [
         {
@@ -1120,6 +1306,26 @@ export const IDL: ClaimingFactory = {
           {
             "name": "claimedAmount",
             "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "actualWallet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "original",
+            "type": "publicKey"
+          },
+          {
+            "name": "actual",
+            "type": "publicKey"
           },
           {
             "name": "bump",
@@ -1298,6 +1504,10 @@ export const IDL: ClaimingFactory = {
                 ]
               }
             }
+          },
+          {
+            "name": "originalWallet",
+            "type": "publicKey"
           }
         ]
       }
@@ -1472,6 +1682,14 @@ export const IDL: ClaimingFactory = {
     {
       "code": 6015,
       "name": "NothingToClaim"
+    },
+    {
+      "code": 6016,
+      "name": "InvalidIntervalDuration"
+    },
+    {
+      "code": 6017,
+      "name": "WrongClaimer"
     }
   ]
 };

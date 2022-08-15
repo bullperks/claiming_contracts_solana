@@ -465,16 +465,96 @@ export class Client {
   /**
    * Claims amount of tokens
    * @param {anchor.web3.PublicKey} distributor - public key of distributor, on which tokes would be claimed
+   * @param {anchor.web3.PublicKey} newWallet -- new wallet which will be used for claiming (but we need to know original anyway)
+   */
+  async changeWallet(distributor: anchor.web3.PublicKey, newWallet: anchor.web3.PublicKey) {
+    const [actualWallet, bump] = await anchor.web3.PublicKey.findProgramAddress(
+      [
+        distributor.toBytes(),
+        this.provider.wallet.publicKey.toBytes(),
+        new TextEncoder().encode("actual-wallet"),
+      ],
+      this.program.programId
+    );
+
+    const actualWalletAccount = await this.program.account.actualWallet.fetchNullable(actualWallet);
+
+    const instructions = [];
+
+    if (actualWalletAccount === null) {
+      const ix = this.program.instruction.initActualWallet(
+        bump,
+        {
+          accounts: {
+            distributor,
+            user: this.provider.wallet.publicKey,
+            actualWallet,
+            systemProgram: anchor.web3.SystemProgram.programId,
+          }
+        }
+      );
+      instructions.push(ix);
+    }
+
+    const [userDetails, _] = await this.findUserDetailsAddress(distributor, this.provider.wallet.publicKey);
+    const [newUserDetails, userDetailsBump] = await this.findUserDetailsAddress(distributor, newWallet);
+
+    await this.program.rpc.changeWallet(
+      userDetailsBump,
+      {
+        accounts: {
+          distributor,
+          user: this.provider.wallet.publicKey,
+          userDetails,
+          newWallet,
+          newUserDetails,
+          actualWallet,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        },
+        instructions,
+      }
+    );
+  }
+
+  /**
+   * Claims amount of tokens
+   * @param {anchor.web3.PublicKey} distributor - public key of distributor, on which tokes would be claimed
    * @param {anchor.web3.PublicKey} targetWallet - wallet of user, which will withdraw tokens
    * @param {anchor.BN} amount - amount of tokens to claim
+   * @param {anchor.web3.PublicKey} originalWallet -- original wallet used for claiming (known on backend even you've changed the wallet)
    * @param {number[][]} merkleProof - merkle proof
    */
   async claim(
     distributor: anchor.web3.PublicKey,
     targetWallet: anchor.web3.PublicKey,
     amount: anchor.BN,
-    merkleProof: number[][]
+    originalWallet: anchor.web3.PublicKey,
+    merkleProof: number[][],
   ) {
+    const actualWalletAccounts = await this.program.account.actualWallet.all([
+      {
+        memcmp: {
+          // 8 bytes for discriminator
+          offset: 8 + 32,
+          bytes: this.provider.wallet.publicKey.toBase58(),
+        },
+      },
+    ]);
+
+    let remainingAccounts = [];
+
+    for (const actualWallet of actualWalletAccounts) {
+      if (actualWallet.account.original.equals(originalWallet)) {
+        remainingAccounts.push(
+          {
+            pubkey: actualWallet.publicKey,
+            isSigner: false,
+            isWritable: false,
+          }
+        );
+      }
+    }
+
     const distributorAccount = await this.program.account.merkleDistributor.fetch(distributor);
     const [vaultAuthority, _vaultBump] = await this.findVaultAuthority(distributor);
     const [userDetails, _userDetailsBump] = await this.findUserDetailsAddress(
@@ -484,7 +564,8 @@ export class Client {
     await this.program.rpc.claim(
       {
         amount,
-        merkleProof
+        merkleProof,
+        originalWallet,
       },
       {
         accounts: {
@@ -496,7 +577,8 @@ export class Client {
           targetWallet,
           tokenProgram: TOKEN_PROGRAM_ID,
           clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
-        }
+        },
+        remainingAccounts
       }
     );
   }

@@ -34,6 +34,7 @@ pub enum ErrorCode {
     VestingAlreadyStarted,
     NothingToClaim,
     InvalidIntervalDuration,
+    WrongClaimer,
 }
 
 /// This event is triggered whenever a call to claim succeeds.
@@ -61,6 +62,8 @@ pub struct TokensWithdrawn {
 
 #[program]
 pub mod claiming_factory {
+    use anchor_lang::AccountsClose;
+
     use super::*;
 
     pub fn initialize_config(ctx: Context<InitializeConfig>, bump: u8) -> Result<()> {
@@ -215,16 +218,75 @@ pub mod claiming_factory {
         Ok(())
     }
 
+    pub fn init_actual_wallet(ctx: Context<InitActualWallet>, bump: u8) -> Result<()> {
+        let actual_wallet = ctx.accounts.actual_wallet.deref_mut();
+
+        *actual_wallet = ActualWallet {
+            original: ctx.accounts.user.key(),
+            actual: ctx.accounts.user.key(),
+            bump,
+        };
+
+        Ok(())
+    }
+
+    pub fn change_wallet(ctx: Context<ChangeWallet>, bump: u8) -> Result<()> {
+        let new_user_details = ctx.accounts.new_user_details.deref_mut();
+
+        *new_user_details = UserDetails {
+            last_claimed_at_ts: ctx.accounts.user_details.last_claimed_at_ts,
+            claimed_amount: ctx.accounts.user_details.claimed_amount,
+            bump,
+        };
+
+        let actual_wallet = &mut ctx.accounts.actual_wallet;
+        actual_wallet.actual = ctx.accounts.new_wallet.key();
+
+        ctx.accounts
+            .user_details
+            .close(ctx.accounts.user.to_account_info())?;
+
+        Ok(())
+    }
+
     pub fn claim(ctx: Context<Claim>, args: ClaimArgs) -> Result<()> {
         let vault = &mut ctx.accounts.vault;
         let distributor = &ctx.accounts.distributor;
         let user_details = &mut ctx.accounts.user_details;
 
+        let actual_wallet = ctx.remaining_accounts.get(0);
+        match actual_wallet {
+            Some(info) => {
+                let actual_wallet: Account<ActualWallet> = Account::try_from(info)?;
+
+                let expected_addr = Pubkey::create_program_address(
+                    &[
+                        ctx.accounts.distributor.key().as_ref(),
+                        args.original_wallet.as_ref(),
+                        b"actual-wallet",
+                        &[actual_wallet.bump],
+                    ],
+                    &ID,
+                )
+                .unwrap();
+
+                require!(expected_addr == actual_wallet.key(), WrongClaimer);
+                require!(actual_wallet.original == args.original_wallet, WrongClaimer);
+                require!(actual_wallet.actual == ctx.accounts.user.key(), WrongClaimer);
+            }
+            None => {
+                require!(
+                    args.original_wallet == ctx.accounts.user.key(),
+                    WrongClaimer
+                );
+            }
+        }
+
         require!(!distributor.paused, Paused);
         require!(user_details.claimed_amount < args.amount, AlreadyClaimed);
 
         let leaf = [
-            &ctx.accounts.user.key().to_bytes()[..],
+            &args.original_wallet.to_bytes()[..],
             &args.amount.to_be_bytes(),
         ];
         let leaf = keccak::hashv(&leaf).0;
@@ -436,6 +498,19 @@ impl Vesting {
         }
 
         (total_percentage_to_claim, total_percentage_to_add)
+    }
+}
+
+#[account]
+pub struct ActualWallet {
+    original: Pubkey,
+    actual: Pubkey,
+    bump: u8,
+}
+
+impl ActualWallet {
+    pub fn space_required() -> usize {
+        8 + std::mem::size_of::<Self>()
     }
 }
 
@@ -701,10 +776,80 @@ pub struct WithdrawTokens<'info> {
     token_program: Program<'info, Token>,
 }
 
+#[derive(Accounts)]
+#[instruction(bump: u8)]
+pub struct InitActualWallet<'info> {
+    distributor: Account<'info, MerkleDistributor>,
+    #[account(mut)]
+    user: Signer<'info>,
+
+    #[account(
+        init,
+        payer = user,
+        space = ActualWallet::space_required(),
+        seeds = [
+            distributor.key().as_ref(),
+            user.key().as_ref(),
+            "actual-wallet".as_ref(),
+        ],
+        bump,
+    )]
+    actual_wallet: Account<'info, ActualWallet>,
+
+    system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(bump: u8)]
+pub struct ChangeWallet<'info> {
+    distributor: Account<'info, MerkleDistributor>,
+    #[account(mut)]
+    user: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [
+            distributor.key().as_ref(),
+            distributor.merkle_index.to_be_bytes().as_ref(),
+            user.key().as_ref(),
+        ],
+        bump = user_details.bump
+    )]
+    user_details: Account<'info, UserDetails>,
+
+    /// CHECK:
+    new_wallet: AccountInfo<'info>,
+    #[account(
+        init,
+        payer = user,
+        space = UserDetails::LEN,
+        seeds = [
+            distributor.key().as_ref(),
+            distributor.merkle_index.to_be_bytes().as_ref(),
+            new_wallet.key().as_ref(),
+        ],
+        bump,
+    )]
+    new_user_details: Account<'info, UserDetails>,
+
+    #[account(
+        mut,
+        seeds = [
+            distributor.key().as_ref(),
+            user.key().as_ref(),
+            "actual-wallet".as_ref(),
+        ],
+        bump,
+    )]
+    actual_wallet: Account<'info, ActualWallet>,
+
+    system_program: Program<'info, System>,
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct ClaimArgs {
     amount: u64,
     merkle_proof: Vec<[u8; 32]>,
+    original_wallet: Pubkey,
 }
 
 #[derive(Accounts)]

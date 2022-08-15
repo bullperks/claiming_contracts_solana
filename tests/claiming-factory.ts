@@ -132,6 +132,7 @@ describe('claiming-factory', () => {
           distributor,
           claimingUser.tokenAccount,
           merkleElement.amount,
+          merkleElement.address,
           merkleElement.proofs
         );
         break;
@@ -692,6 +693,48 @@ describe('claiming-factory', () => {
 
         targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUser.tokenAccount);
         assert.ok(targetWalletAccount.amount.eq(merkleElement.amount.add(firstAmount)));
+      });
+
+      it("should claim correctly after the wallet has been changed", async function () {
+        const claimingUser = claimingUsers[1];
+        const newClaimingUser = claimingUsers[2];
+        const merkleElement = merkleData.proofs[1];
+
+        let elementClient = new claiming.Client(claimingUser.wallet, claiming.LOCALNET);
+
+        const userDetails = await elementClient.initUserDetails(this.distributor, claimingUser.wallet.publicKey);
+        const userDetailsAccount = await elementClient.program.account.userDetails.fetch(userDetails);
+        console.log(userDetailsAccount.claimedAmount.toNumber(), merkleElement.amount.toNumber());
+        await elementClient.changeWallet(this.distributor, newClaimingUser.wallet.publicKey);
+
+        elementClient = new claiming.Client(newClaimingUser.wallet, claiming.LOCALNET);
+
+        while (true) {
+          try {
+            console.log(
+              "available to claim",
+              await elementClient.getAmountAvailableToClaim(
+                this.distributor,
+                newClaimingUser.wallet.publicKey,
+                merkleElement.amount.toNumber()
+              )
+            );
+
+            await elementClient.claim(
+              this.distributor,
+              newClaimingUser.tokenAccount,
+              merkleElement.amount,
+              merkleElement.address,
+              merkleElement.proofs
+            );
+            break;
+          } catch (err: any) {
+            if (err.code != 6015) {
+              throw err;
+            }
+            await serumCmn.sleep(15000);
+          }
+        }
       });
     });
 

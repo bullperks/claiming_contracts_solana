@@ -288,6 +288,83 @@
       ]
     },
     {
+      "name": "initActualWallet",
+      "accounts": [
+        {
+          "name": "distributor",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "user",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "actualWallet",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "bump",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "changeWallet",
+      "accounts": [
+        {
+          "name": "distributor",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "user",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "userDetails",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "newWallet",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "newUserDetails",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "actualWallet",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "bump",
+          "type": "u8"
+        }
+      ]
+    },
+    {
       "name": "claim",
       "accounts": [
         {
@@ -381,6 +458,26 @@
           {
             "name": "claimedAmount",
             "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ActualWallet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "original",
+            "type": "publicKey"
+          },
+          {
+            "name": "actual",
+            "type": "publicKey"
           },
           {
             "name": "bump",
@@ -559,6 +656,10 @@
                 ]
               }
             }
+          },
+          {
+            "name": "originalWallet",
+            "type": "publicKey"
           }
         ]
       }
@@ -733,9 +834,14 @@
     {
       "code": 6015,
       "name": "NothingToClaim"
+    },
+    {
+      "code": 6016,
+      "name": "InvalidIntervalDuration"
+    },
+    {
+      "code": 6017,
+      "name": "WrongClaimer"
     }
-  ],
-  "metadata": {
-    "address": "3yELWiEQynmnXAavxAuQC9RDA4VoVkJeZSvX5a6P4Vvs"
-  }
+  ]
 }
