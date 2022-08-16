@@ -310,7 +310,7 @@ pub mod claiming_factory {
 
         let (bps_to_claim, bps_to_add) = distributor
             .vesting
-            .bps_available_to_claim(ctx.accounts.clock.unix_timestamp as u64, user_details);
+            .bps_available_to_claim(ctx.accounts.clock.unix_timestamp as u64, user_details)?;
         let amount = (Decimal::from_u64(args.amount).unwrap() * bps_to_claim)
             .ceil()
             .to_u64()
@@ -336,8 +336,14 @@ pub mod claiming_factory {
         }
         .make()?;
 
-        user_details.claimed_amount += amount;
-        user_details.claimed_amount += amount_to_add;
+        user_details.claimed_amount = user_details
+            .claimed_amount
+            .checked_add(amount)
+            .ok_or(ErrorCode::IntegerOverflow)?;
+        user_details.claimed_amount = user_details
+            .claimed_amount
+            .checked_add(amount_to_add)
+            .ok_or(ErrorCode::IntegerOverflow)?;
 
         user_details.last_claimed_at_ts = ctx.accounts.clock.unix_timestamp as u64;
 
@@ -458,7 +464,11 @@ impl Vesting {
         }
     }
 
-    fn bps_available_to_claim(&self, now: u64, user_details: &UserDetails) -> (Decimal, Decimal) {
+    fn bps_available_to_claim(
+        &self,
+        now: u64,
+        user_details: &UserDetails,
+    ) -> Result<(Decimal, Decimal)> {
         let mut total_percentage_to_claim = Decimal::ZERO;
         let mut total_percentage_to_add = Decimal::ZERO;
 
@@ -470,7 +480,12 @@ impl Vesting {
                 break;
             }
 
-            let period_end_ts = period.start_ts + period.times * period.interval_sec;
+            let period_end_ts = period
+                .times
+                .checked_mul(period.interval_sec)
+                .ok_or(ErrorCode::IntegerOverflow)?
+                .checked_add(period.start_ts)
+                .ok_or(ErrorCode::IntegerOverflow)?;
             if period_end_ts <= user_details.last_claimed_at_ts {
                 sol_log("skip since we've already claimed");
                 continue;
@@ -482,10 +497,20 @@ impl Vesting {
                 continue;
             }
 
-            let last_claimed_at_ts_aligned_by_interval = user_details.last_claimed_at_ts
-                - user_details.last_claimed_at_ts % period.interval_sec;
-            let seconds_passed =
-                now - std::cmp::max(period.start_ts, last_claimed_at_ts_aligned_by_interval);
+            let alignment = user_details
+                .last_claimed_at_ts
+                .checked_rem(period.interval_sec)
+                .ok_or(ErrorCode::IntegerOverflow)?;
+            let last_claimed_at_ts_aligned_by_interval = user_details
+                .last_claimed_at_ts
+                .checked_sub(alignment)
+                .ok_or(ErrorCode::IntegerOverflow)?;
+            let seconds_passed = now
+                .checked_sub(std::cmp::max(
+                    period.start_ts,
+                    last_claimed_at_ts_aligned_by_interval,
+                ))
+                .ok_or(ErrorCode::IntegerOverflow)?;
             let intervals_passed = seconds_passed / period.interval_sec;
             let intervals_passed = std::cmp::min(intervals_passed, period.times);
 
@@ -505,7 +530,7 @@ impl Vesting {
             total_percentage_to_claim += percentage_for_intervals;
         }
 
-        (total_percentage_to_claim, total_percentage_to_add)
+        Ok((total_percentage_to_claim, total_percentage_to_add))
     }
 }
 
