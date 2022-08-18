@@ -383,6 +383,11 @@
           "isSigner": false
         },
         {
+          "name": "actualWallet",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
           "name": "vaultAuthority",
           "isMut": false,
           "isSigner": false

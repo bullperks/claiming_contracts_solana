@@ -383,6 +383,11 @@ export type ClaimingFactory = {
           "isSigner": false
         },
         {
+          "name": "actualWallet",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
           "name": "vaultAuthority",
           "isMut": false,
           "isSigner": false
@@ -1228,6 +1233,11 @@ export const IDL: ClaimingFactory = {
         {
           "name": "userDetails",
           "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "actualWallet",
+          "isMut": false,
           "isSigner": false
         },
         {

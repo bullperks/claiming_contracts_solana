@@ -257,37 +257,6 @@ pub mod claiming_factory {
         let distributor = &ctx.accounts.distributor;
         let user_details = &mut ctx.accounts.user_details;
 
-        let actual_wallet = ctx.remaining_accounts.get(0);
-        match actual_wallet {
-            Some(info) => {
-                let actual_wallet: Account<ActualWallet> = Account::try_from(info)?;
-
-                let expected_addr = Pubkey::create_program_address(
-                    &[
-                        ctx.accounts.distributor.key().as_ref(),
-                        args.original_wallet.as_ref(),
-                        b"actual-wallet",
-                        &[actual_wallet.bump],
-                    ],
-                    &ID,
-                )
-                .unwrap();
-
-                require!(expected_addr == actual_wallet.key(), WrongClaimer);
-                require!(actual_wallet.original == args.original_wallet, WrongClaimer);
-                require!(
-                    actual_wallet.actual == ctx.accounts.user.key(),
-                    WrongClaimer
-                );
-            }
-            None => {
-                require!(
-                    args.original_wallet == ctx.accounts.user.key(),
-                    WrongClaimer
-                );
-            }
-        }
-
         require!(!distributor.paused, Paused);
         require!(user_details.claimed_amount < args.amount, AlreadyClaimed);
 
@@ -897,9 +866,23 @@ pub struct Claim<'info> {
             distributor.merkle_index.to_be_bytes().as_ref(),
             user.key().as_ref(),
         ],
-        bump = user_details.bump
+        bump = user_details.bump,
     )]
     user_details: Account<'info, UserDetails>,
+
+    #[account(
+        seeds = [
+            distributor.key().as_ref(),
+            args.original_wallet.as_ref(),
+            b"actual-wallet",
+        ],
+        bump = actual_wallet.bump,
+        constraint = user.key() == actual_wallet.actual
+            @ ErrorCode::WrongClaimer,
+        constraint = args.original_wallet == actual_wallet.original
+            @ ErrorCode::WrongClaimer,
+    )]
+    actual_wallet: Account<'info, ActualWallet>,
 
     /// CHECK:
     #[account(

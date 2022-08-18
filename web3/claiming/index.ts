@@ -357,6 +357,28 @@ export class Client {
     return [userDetails, bump];
   }
 
+  async initUserDetailsInstruction(
+    distributor: anchor.web3.PublicKey,
+    user: anchor.web3.PublicKey
+  ): Promise<anchor.web3.TransactionInstruction> {
+    const [userDetails, bump] = await this.findUserDetailsAddress(distributor, user);
+
+    const ix = this.program.instruction.initUserDetails(
+      bump,
+      {
+        accounts: {
+          payer: this.provider.wallet.publicKey,
+          user,
+          userDetails,
+          distributor,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        }
+      }
+    );
+
+    return ix;
+  }
+
   /**
    * Initializes user details
    * @param {anchor.web3.PublicKey} distributor - public key of distributor, on which tokes were claimed
@@ -399,18 +421,7 @@ export class Client {
     user: anchor.web3.PublicKey
   ): Promise<UserDetails | null> {
     const [userDetails, _bump] = await this.findUserDetailsAddress(distributor, user);
-
-    try {
-      const userDetailsAccount = await this.program.account.userDetails.fetch(userDetails);
-      return userDetailsAccount;
-    } catch (err) {
-      const errMessage = `${FAILED_TO_FIND_ACCOUNT} ${userDetails.toString()}`;
-      if (err.message === errMessage) {
-        return null;
-      } else {
-        throw err;
-      }
-    }
+    return await this.program.account.userDetails.fetchNullable(userDetails);
   }
 
   async getAmountAvailableToClaim(
@@ -531,36 +542,47 @@ export class Client {
     originalWallet: anchor.web3.PublicKey,
     merkleProof: number[][],
   ) {
-    const actualWalletAccounts = await this.program.account.actualWallet.all([
-      {
-        memcmp: {
-          // 8 bytes for discriminator
-          offset: 8 + 32,
-          bytes: this.provider.wallet.publicKey.toBase58(),
-        },
-      },
-    ]);
+    const instructions = [];
 
-    let remainingAccounts = [];
-
-    for (const actualWallet of actualWalletAccounts) {
-      if (actualWallet.account.original.equals(originalWallet)) {
-        remainingAccounts.push(
-          {
-            pubkey: actualWallet.publicKey,
-            isSigner: false,
-            isWritable: false,
-          }
-        );
-      }
+    const [userDetails, _bump] = await this.findUserDetailsAddress(distributor, this.provider.wallet.publicKey);
+    const userDetailsAccount = await this.getUserDetails(distributor, this.provider.wallet.publicKey);
+    if (userDetailsAccount === null) {
+      instructions.push(
+        await this.initUserDetailsInstruction(
+          distributor,
+          this.provider.wallet.publicKey
+        ));
     }
 
     const distributorAccount = await this.program.account.merkleDistributor.fetch(distributor);
     const [vaultAuthority, _vaultBump] = await this.findVaultAuthority(distributor);
-    const [userDetails, _userDetailsBump] = await this.findUserDetailsAddress(
-      distributor,
-      this.provider.wallet.publicKey
+
+    const [actualWallet, bump] = await anchor.web3.PublicKey.findProgramAddress(
+      [
+        distributor.toBytes(),
+        originalWallet.toBytes(),
+        new TextEncoder().encode("actual-wallet"),
+      ],
+      this.program.programId
     );
+
+    const actualWalletAccount = await this.program.account.actualWallet.fetchNullable(actualWallet);
+
+    if (actualWalletAccount === null) {
+      const ix = this.program.instruction.initActualWallet(
+        bump,
+        {
+          accounts: {
+            distributor,
+            user: this.provider.wallet.publicKey,
+            actualWallet,
+            systemProgram: anchor.web3.SystemProgram.programId,
+          }
+        }
+      );
+      instructions.push(ix);
+    }
+
     await this.program.rpc.claim(
       {
         amount,
@@ -572,14 +594,15 @@ export class Client {
           distributor,
           user: this.provider.wallet.publicKey,
           userDetails,
+          actualWallet,
           vaultAuthority,
           vault: distributorAccount.vault,
           targetWallet,
           tokenProgram: TOKEN_PROGRAM_ID,
           clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
         },
-        remainingAccounts
-      }
+        instructions,
+      },
     );
   }
 }
