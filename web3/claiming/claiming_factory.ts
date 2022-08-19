@@ -347,6 +347,11 @@ export type ClaimingFactory = {
           "isSigner": false
         },
         {
+          "name": "originalWallet",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
           "name": "actualWallet",
           "isMut": true,
           "isSigner": false
@@ -847,6 +852,10 @@ export type ClaimingFactory = {
     {
       "code": 6017,
       "name": "WrongClaimer"
+    },
+    {
+      "code": 6018,
+      "name": "NotAllowedToChangeWallet"
     }
   ]
 };
@@ -1200,6 +1209,11 @@ export const IDL: ClaimingFactory = {
           "isSigner": false
         },
         {
+          "name": "originalWallet",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
           "name": "actualWallet",
           "isMut": true,
           "isSigner": false
@@ -1700,6 +1714,10 @@ export const IDL: ClaimingFactory = {
     {
       "code": 6017,
       "name": "WrongClaimer"
+    },
+    {
+      "code": 6018,
+      "name": "NotAllowedToChangeWallet"
     }
   ]
 };

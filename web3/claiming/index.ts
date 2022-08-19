@@ -477,19 +477,23 @@ export class Client {
    * Claims amount of tokens
    * @param {anchor.web3.PublicKey} distributor - public key of distributor, on which tokes would be claimed
    * @param {anchor.web3.PublicKey} newWallet -- new wallet which will be used for claiming (but we need to know original anyway)
+   * @param {anchor.web3.PublicKey} originalWallet -- original wallet (by default equals to current wallet)
    */
-  async changeWallet(distributor: anchor.web3.PublicKey, newWallet: anchor.web3.PublicKey) {
+  async changeWallet(
+    distributor: anchor.web3.PublicKey,
+    newWallet: anchor.web3.PublicKey,
+    originalWallet: anchor.web3.PublicKey = this.provider.wallet.publicKey
+  ) {
     const [actualWallet, bump] = await anchor.web3.PublicKey.findProgramAddress(
       [
         distributor.toBytes(),
-        this.provider.wallet.publicKey.toBytes(),
+        originalWallet.toBytes(),
         new TextEncoder().encode("actual-wallet"),
       ],
       this.program.programId
     );
 
     const actualWalletAccount = await this.program.account.actualWallet.fetchNullable(actualWallet);
-
     const instructions = [];
 
     if (actualWalletAccount === null) {
@@ -520,6 +524,7 @@ export class Client {
           newWallet,
           newUserDetails,
           actualWallet,
+          originalWallet,
           systemProgram: anchor.web3.SystemProgram.programId,
         },
         instructions,

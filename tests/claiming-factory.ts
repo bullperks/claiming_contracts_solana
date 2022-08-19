@@ -736,6 +736,56 @@ describe('claiming-factory', () => {
           }
         }
       });
+
+      it("should claim correctly after the wallet has been changed twice", async function () {
+        const claimingUser = claimingUsers[1];
+        const newClaimingUser = claimingUsers[2];
+        const lastClaimingUser = claimingUsers[3];
+        const merkleElement = merkleData.proofs[1];
+
+        let elementClient = new claiming.Client(claimingUser.wallet, claiming.LOCALNET);
+
+        let userDetails = await elementClient.initUserDetails(this.distributor, claimingUser.wallet.publicKey);
+        let userDetailsAccount = await elementClient.program.account.userDetails.fetch(userDetails);
+        console.log(userDetailsAccount.claimedAmount.toNumber(), merkleElement.amount.toNumber());
+        await elementClient.changeWallet(this.distributor, newClaimingUser.wallet.publicKey);
+
+        elementClient = new claiming.Client(newClaimingUser.wallet, claiming.LOCALNET);
+
+        userDetails = await elementClient.initUserDetails(this.distributor, newClaimingUser.wallet.publicKey);
+        userDetailsAccount = await elementClient.program.account.userDetails.fetch(userDetails);
+        console.log(userDetailsAccount.claimedAmount.toNumber(), merkleElement.amount.toNumber());
+        await elementClient.changeWallet(this.distributor, lastClaimingUser.wallet.publicKey, claimingUser.wallet.publicKey);
+
+        elementClient = new claiming.Client(lastClaimingUser.wallet, claiming.LOCALNET);
+
+        while (true) {
+          try {
+            console.log(
+              "available to claim",
+              await elementClient.getAmountAvailableToClaim(
+                this.distributor,
+                lastClaimingUser.wallet.publicKey,
+                merkleElement.amount.toNumber()
+              )
+            );
+
+            await elementClient.claim(
+              this.distributor,
+              lastClaimingUser.tokenAccount,
+              merkleElement.amount,
+              merkleElement.address,
+              merkleElement.proofs
+            );
+            break;
+          } catch (err: any) {
+            if (err.code != 6015) {
+              throw err;
+            }
+            await serumCmn.sleep(15000);
+          }
+        }
+      });
     });
 
     context("complicated schedule", async function () {

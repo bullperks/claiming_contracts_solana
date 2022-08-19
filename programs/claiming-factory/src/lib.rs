@@ -35,6 +35,7 @@ pub enum ErrorCode {
     NothingToClaim,
     InvalidIntervalDuration,
     WrongClaimer,
+    NotAllowedToChangeWallet,
 }
 
 /// This event is triggered whenever a call to claim succeeds.
@@ -538,7 +539,8 @@ impl MerkleDistributor {
 pub struct InitUserDetails<'info> {
     #[account(mut)]
     payer: Signer<'info>,
-    /// CHECK:
+    /// CHECK: ordinary Solana account (no requirements)
+    /// we can init UserDetails for other user too
     user: AccountInfo<'info>,
     #[account(
         init,
@@ -609,7 +611,7 @@ pub struct Initialize<'info> {
     )]
     distributor: Account<'info, MerkleDistributor>,
 
-    /// CHECK:
+    /// CHECK: PDA which is set as vault authority
     #[account(
         seeds = [
             distributor.key().as_ref()
@@ -717,7 +719,7 @@ pub struct AddAdmin<'info> {
             @ ErrorCode::NotOwner
     )]
     owner: Signer<'info>,
-    /// CHECK:
+    /// CHECK: ordinary Solana account (no requirements)
     admin: AccountInfo<'info>,
 }
 
@@ -736,7 +738,7 @@ pub struct RemoveAdmin<'info> {
             @ ErrorCode::NotOwner
     )]
     owner: Signer<'info>,
-    /// CHECK:
+    /// CHECK: ordinary Solana account (no requirement)
     admin: AccountInfo<'info>,
 }
 
@@ -756,7 +758,7 @@ pub struct WithdrawTokens<'info> {
     )]
     owner: Signer<'info>,
 
-    /// CHECK:
+    /// CHECK: PDA which is set as vault authority
     #[account(
         seeds = [
             distributor.key().as_ref()
@@ -818,7 +820,7 @@ pub struct ChangeWallet<'info> {
     )]
     user_details: Account<'info, UserDetails>,
 
-    /// CHECK:
+    /// CHECK: ordinary Solana account (no requirements)
     new_wallet: AccountInfo<'info>,
     #[account(
         init,
@@ -833,14 +835,20 @@ pub struct ChangeWallet<'info> {
     )]
     new_user_details: Account<'info, UserDetails>,
 
+    /// CHECK: ordinary Solana account (no requirements)
+    original_wallet: AccountInfo<'info>,
     #[account(
         mut,
         seeds = [
             distributor.key().as_ref(),
-            user.key().as_ref(),
+            original_wallet.key().as_ref(),
             "actual-wallet".as_ref(),
         ],
         bump,
+        constraint = actual_wallet.original == original_wallet.key()
+            @ ErrorCode::NotAllowedToChangeWallet,
+        constraint = actual_wallet.actual == user.key()
+            @ ErrorCode::NotAllowedToChangeWallet
     )]
     actual_wallet: Account<'info, ActualWallet>,
 
@@ -884,7 +892,7 @@ pub struct Claim<'info> {
     )]
     actual_wallet: Account<'info, ActualWallet>,
 
-    /// CHECK:
+    /// CHECK: PDA which is set as vault authority
     #[account(
         seeds = [
             distributor.key().as_ref()

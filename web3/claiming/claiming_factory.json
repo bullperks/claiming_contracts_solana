@@ -347,6 +347,11 @@
           "isSigner": false
         },
         {
+          "name": "originalWallet",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
           "name": "actualWallet",
           "isMut": true,
           "isSigner": false
@@ -847,6 +852,10 @@
     {
       "code": 6017,
       "name": "WrongClaimer"
+    },
+    {
+      "code": 6018,
+      "name": "NotAllowedToChangeWallet"
     }
   ]
 }
