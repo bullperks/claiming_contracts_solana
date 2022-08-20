@@ -463,7 +463,8 @@ impl Vesting {
 
             if period.airdropped {
                 sol_log("this period was airdropped");
-                total_percentage_to_add += Decimal::new(period.token_percentage as i64, 4);
+                total_percentage_to_add +=
+                    Decimal::new(period.token_percentage as i64, DECIMALS + 2);
                 continue;
             }
 

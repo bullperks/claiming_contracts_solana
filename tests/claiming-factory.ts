@@ -56,7 +56,7 @@ describe('claiming-factory', () => {
     const wallets = [];
     for (var i = 0; i < 5; i++) {
       const wallet = new anchor.Wallet(anchor.web3.Keypair.generate());
-      data.push({ address: wallet.publicKey, amount: i });
+      data.push({ address: wallet.publicKey, amount: i * 1000 });
       const tokenAccount = await serumCmn.createTokenAccount(provider, mint.publicKey, wallet.publicKey);
 
       let tx = await provider.connection.requestAirdrop(wallet.publicKey, 2 * LAMPORTS_PER_SOL);
@@ -89,7 +89,7 @@ describe('claiming-factory', () => {
     const distributorAccount = await program.account.merkleDistributor.fetch(distributor);
 
     const vault = distributorAccount.vault;
-    mint.mintTo(vault, provider.wallet.publicKey, [], 1000);
+    mint.mintTo(vault, provider.wallet.publicKey, [], 15000);
 
     const vaultAuthority = await anchor.web3.PublicKey.createProgramAddress(
       [
@@ -110,11 +110,12 @@ describe('claiming-factory', () => {
   async function claim(
     distributor: anchor.web3.PublicKey,
     index: number,
-    proof?: merkle.MerkleProof
+    proof?: merkle.MerkleProof,
+    claimingUser?: ClaimingUser
   ): Promise<[merkle.MerkleProof, ClaimingUser]> {
     const merkleElement = proof ? proof : merkleData.proofs[index];
-    const claimingUser = claimingUsers[index];
-    const elementClient = new claiming.Client(claimingUser.wallet, claiming.LOCALNET);
+    const chosenUser = claimingUser ? claimingUser : claimingUsers[index];
+    const elementClient = new claiming.Client(chosenUser.wallet, claiming.LOCALNET);
     await elementClient.initUserDetails(distributor, merkleElement.address);
 
     while (true) {
@@ -123,14 +124,14 @@ describe('claiming-factory', () => {
           "available to claim",
           await elementClient.getAmountAvailableToClaim(
             distributor,
-            claimingUser.wallet.publicKey,
+            chosenUser.wallet.publicKey,
             merkleElement.amount.toNumber()
           )
         );
 
         await elementClient.claim(
           distributor,
-          claimingUser.tokenAccount,
+          chosenUser.tokenAccount,
           merkleElement.amount,
           merkleElement.address,
           merkleElement.proofs
@@ -144,7 +145,7 @@ describe('claiming-factory', () => {
       }
     }
 
-    return [merkleElement, claimingUser];
+    return [merkleElement, chosenUser];
   }
 
   before(async () => {
@@ -786,6 +787,48 @@ describe('claiming-factory', () => {
           }
         }
       });
+
+      it("shouldn't allow to claim with changed wallet", async function () {
+        const data = [];
+
+        for (const merkleElement of merkleData.proofs) {
+          data.push({ address: merkleElement.address, amount: merkleElement.amount });
+        }
+
+        const newWallet = new anchor.Wallet(anchor.web3.Keypair.generate());
+        const tokenAccount = await serumCmn.createTokenAccount(provider, mint.publicKey, newWallet.publicKey);
+
+        let tx = await provider.connection.requestAirdrop(newWallet.publicKey, 2 * LAMPORTS_PER_SOL);
+        await provider.connection.confirmTransaction(tx);
+
+        data[4] = {
+          address: newWallet.publicKey,
+          amount: data[4].amount
+        };
+
+        const newMerkle = merkle.getMerkleProof(data);
+        assert.notStrictEqual(newMerkle.root, merkleData.root);
+        assert.ok(!newMerkle.proofs[4].address.equals(merkleData.proofs[4].address));
+        assert.strictEqual(newMerkle.proofs[4].amount, merkleData.proofs[4].amount);
+        assert.notStrictEqual(newMerkle.proofs[4].proofs, merkleData.proofs[4].proofs);
+
+        await assert.rejects(
+          async () => {
+            await claim(
+              this.distributor, 4,
+              newMerkle.proofs[4],
+              {
+                wallet: newWallet,
+                tokenAccount
+              }
+            );
+          },
+          (err) => {
+            assert.equal(err.code, 6003);
+            return true;
+          }
+        )
+      });
     });
 
     context("complicated schedule", async function () {
@@ -849,6 +892,88 @@ describe('claiming-factory', () => {
         targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUser.tokenAccount);
         console.log(targetWalletAccount.amount.toNumber(), merkleElement.amount.toNumber());
         assert.ok(targetWalletAccount.amount.sub(beforeClaimAmount).eq(merkleElement.amount.divn(2)));
+
+        await assert.rejects(
+          async () => {
+            await claim(r.distributor, 2);
+          },
+          (err) => {
+            assert.equal(err.code, 6004);
+            return true;
+          }
+        );
+      });
+
+      it("should show correct claimed amount bamboozle", async function () {
+        const now = Date.now() / 1000;
+
+        const r = await setupDistributor([
+          {
+            tokenPercentage: new anchor.BN(10_000_000_000),
+            startTs: new anchor.BN(now),
+            intervalSec: new anchor.BN(1),
+            times: new anchor.BN(1),
+            airdropped: true,
+          },
+          {
+            tokenPercentage: new anchor.BN(30_000_000_000),
+            startTs: new anchor.BN(now + 2),
+            intervalSec: new anchor.BN(1),
+            times: new anchor.BN(1),
+            airdropped: false,
+          },
+          {
+            tokenPercentage: new anchor.BN(60_000_000_000),
+            startTs: new anchor.BN(now + 16),
+            intervalSec: new anchor.BN(1),
+            times: new anchor.BN(1),
+            airdropped: false,
+          }
+        ]);
+
+        let targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUsers[2].tokenAccount);
+        const beforeClaimAmount = targetWalletAccount.amount;
+
+        let [merkleElement, claimingUser] = await claim(r.distributor, 2);
+
+        const elementClient = new claiming.Client(claimingUsers[2].wallet, claiming.LOCALNET);
+        let userDetails = await elementClient.getUserDetails(r.distributor, claimingUsers[2].wallet.publicKey);
+        console.log(
+          "user details",
+          userDetails.claimedAmount.toNumber(),
+          userDetails.lastClaimedAtTs.toNumber()
+        );
+        assert.strictEqual(userDetails.claimedAmount.toNumber(), 800);
+
+        targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUser.tokenAccount);
+        console.log(
+          "wallet amount, total available",
+          targetWalletAccount.amount.toNumber(),
+          merkleElement.amount.toNumber()
+        );
+        // total amount should be equal to merkleElement.amount * 0.9
+        // because 10% is airdropped
+        assert.ok(targetWalletAccount.amount.sub(beforeClaimAmount).eq(merkleElement.amount.muln(0.3)));
+
+        [merkleElement, claimingUser] = await claim(r.distributor, 2);
+
+        userDetails = await elementClient.getUserDetails(r.distributor, claimingUsers[2].wallet.publicKey);
+        console.log(
+          "user details",
+          userDetails.claimedAmount.toNumber(),
+          userDetails.lastClaimedAtTs.toNumber()
+        );
+        assert.strictEqual(userDetails.claimedAmount.toNumber(), 2000);
+
+        targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUser.tokenAccount);
+        console.log(
+          "wallet amount, total available",
+          targetWalletAccount.amount.toNumber(),
+          merkleElement.amount.toNumber()
+        );
+        // total amount should be equal to merkleElement.amount * 0.9
+        // because 10% is airdropped
+        assert.ok(targetWalletAccount.amount.sub(beforeClaimAmount).eq(merkleElement.amount.muln(0.9)));
 
         await assert.rejects(
           async () => {
