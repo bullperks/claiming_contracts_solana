@@ -103,6 +103,12 @@ enum Command {
         #[structopt(long)]
         claiming: Pubkey,
     },
+    ShowUserDetails {
+        #[structopt(long)]
+        claiming: Pubkey,
+        #[structopt(long)]
+        user: Pubkey,
+    },
 }
 
 fn main() -> Result<()> {
@@ -270,6 +276,20 @@ fn main() -> Result<()> {
         Command::ShowClaiming { claiming } => {
             let claiming: claiming_factory::MerkleDistributor = client.account(claiming)?;
             println!("{:#?}", claiming);
+        }
+        Command::ShowUserDetails { claiming, user } => {
+            let claiming_account: claiming_factory::MerkleDistributor = client.account(claiming)?;
+            let (user_details, _bump) = Pubkey::find_program_address(
+                &[
+                    claiming.as_ref(),
+                    claiming_account.merkle_index.to_be_bytes().as_ref(),
+                    user.as_ref(),
+                ],
+                &client.id(),
+            );
+            let user_details_account: claiming_factory::UserDetails =
+                client.account(user_details)?;
+            println!("{:#?}", user_details_account);
         }
     }
 

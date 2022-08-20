@@ -829,6 +829,60 @@ describe('claiming-factory', () => {
           }
         )
       });
+
+      it("should correctly calculate proofs", async function () {
+        const wallets = [
+          {
+            address: new anchor.web3.PublicKey("CvaphX6cibq2sRaYVHx83pZzGd1Nqm9rYAJhL2WPfriw"),
+            amount: 900000000000
+          },
+          {
+            address: new anchor.web3.PublicKey("beRtbXfdgpw29mbXrFi5aTeV6UHPhacmZ8SnuNKUXQh"),
+            amount: 1800000000000,
+          },
+          {
+            address: new anchor.web3.PublicKey("EkphYPH8TrkfNgXot6JkZSGXvodkpZK5fwmd1iMYijWJ"),
+            amount: 1200000000000
+          }
+        ];
+        const merkleTree = merkle.getMerkleProof(wallets);
+        console.log("first root", JSON.stringify(merkleTree.root));
+        console.log("first proof", JSON.stringify(merkleTree.proofs[2]));
+
+        const wallets1 = [
+          {
+            address: new anchor.web3.PublicKey("CvaphX6cibq2sRaYVHx83pZzGd1Nqm9rYAJhL2WPfriw"),
+            amount: 900000000000
+          },
+          {
+            address: new anchor.web3.PublicKey("beRtbXfdgpw29mbXrFi5aTeV6UHPhacmZ8SnuNKUXQh"),
+            amount: 1800000000000,
+          },
+          {
+            address: new anchor.web3.PublicKey("AjWLgDTRtwcd8XBs5Bp1BraqXYAMqarzR51R2sEn1y7S"),
+            amount: 1200000000000
+          }
+        ];
+        const merkleTree1 = merkle.getMerkleProof(wallets1);
+        console.log("second root", JSON.stringify(merkleTree1.root));
+        console.log("second proof", JSON.stringify(merkleTree1.proofs[2]));
+
+        console.log(
+          "first leaf",
+          JSON.stringify(merkle.MerkleTree.toLeaf(merkleTree.proofs[2].address, merkleTree.proofs[2].amount))
+        );
+        console.log(
+          "second leaf",
+          JSON.stringify(merkle.MerkleTree.toLeaf(merkleTree1.proofs[2].address, merkleTree1.proofs[2].amount))
+        );
+
+        assert.ok(!merkle.MerkleTree.verifyProof(
+          merkleTree.proofs[2].address,
+          merkleTree1.proofs[2].amount,
+          merkleTree1.proofs[2].proofs,
+          merkleTree.root
+        ));
+      });
     });
 
     context("complicated schedule", async function () {
@@ -904,7 +958,7 @@ describe('claiming-factory', () => {
         );
       });
 
-      it("should show correct claimed amount bamboozle", async function () {
+      it("should show correct claimed amount", async function () {
         const now = Date.now() / 1000;
 
         const r = await setupDistributor([

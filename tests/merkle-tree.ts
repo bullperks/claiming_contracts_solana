@@ -38,7 +38,6 @@ export function getMerkleProof(data: MerkleTreeElement[]): MerkleData {
   let proofs = elements.map((x) => {
     return {
       proofs: merkleTree.getProof(x.leaf),
-      index: x.index,
       address: x.address,
       amount: x.amount
     };
@@ -65,6 +64,10 @@ export class MerkleTree {
     this.elements.sort(Buffer.compare);
     // Deduplicate elements
     this.elements = this.bufDedup(this.elements);
+    if (this.elements.length % 2 === 1) {
+      // using default value (array of 32 zeros)
+      this.elements.push(this.elements[this.elements.length - 1]);
+    }
 
     // Create layers
     this.layers = this.getLayers(this.elements);

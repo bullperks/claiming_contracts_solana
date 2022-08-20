@@ -261,22 +261,12 @@ pub mod claiming_factory {
         require!(!distributor.paused, Paused);
         require!(user_details.claimed_amount < args.amount, AlreadyClaimed);
 
-        let leaf = [
-            &args.original_wallet.to_bytes()[..],
-            &args.amount.to_be_bytes(),
-        ];
-        let leaf = keccak::hashv(&leaf).0;
-
-        let mut computed_hash = leaf;
-        for proof_element in args.merkle_proof {
-            if computed_hash <= proof_element {
-                computed_hash = keccak::hashv(&[computed_hash.as_ref(), proof_element.as_ref()]).0;
-            } else {
-                computed_hash = keccak::hashv(&[proof_element.as_ref(), computed_hash.as_ref()]).0;
-            }
-        }
-
-        require!(computed_hash == distributor.merkle_root, InvalidProof);
+        check_proof(
+            &args.original_wallet,
+            args.amount,
+            &distributor.merkle_root,
+            &args.merkle_proof,
+        )?;
 
         let (bps_to_claim, bps_to_add) = distributor
             .vesting
@@ -328,6 +318,31 @@ pub mod claiming_factory {
     }
 }
 
+fn check_proof(
+    original_wallet: &Pubkey,
+    amount: u64,
+    root: &[u8],
+    proof: &[[u8; 32]],
+) -> Result<()> {
+    let leaf = [&original_wallet.to_bytes()[..], &amount.to_be_bytes()];
+    let leaf = keccak::hashv(&leaf).0;
+
+    let mut computed_hash = leaf;
+    for proof_element in proof {
+        if computed_hash <= *proof_element {
+            computed_hash = keccak::hashv(&[computed_hash.as_ref(), proof_element.as_ref()]).0;
+        } else {
+            computed_hash = keccak::hashv(&[proof_element.as_ref(), computed_hash.as_ref()]).0;
+        }
+    }
+
+    println!("{:?}", computed_hash);
+
+    require!(computed_hash == root, InvalidProof);
+
+    Ok(())
+}
+
 #[account]
 #[derive(Debug)]
 pub struct Config {
@@ -341,6 +356,7 @@ impl Config {
 }
 
 #[account]
+#[derive(Debug)]
 pub struct UserDetails {
     last_claimed_at_ts: u64,
     claimed_amount: u64,
@@ -521,12 +537,12 @@ impl ActualWallet {
 #[account]
 #[derive(Debug)]
 pub struct MerkleDistributor {
-    merkle_index: u64,
-    merkle_root: [u8; 32],
-    paused: bool,
-    vault_bump: u8,
-    vault: Pubkey,
-    vesting: Vesting,
+    pub merkle_index: u64,
+    pub merkle_root: [u8; 32],
+    pub paused: bool,
+    pub vault_bump: u8,
+    pub vault: Pubkey,
+    pub vesting: Vesting,
 }
 
 impl MerkleDistributor {
