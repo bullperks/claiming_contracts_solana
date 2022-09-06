@@ -13,6 +13,7 @@ cpi = ["no-entrypoint"]
 default = []
 no-entrypoint = []
 no-idl = []
+local = []
 
 [dependencies]
 anchor-lang = "0.24"

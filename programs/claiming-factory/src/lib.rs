@@ -13,7 +13,11 @@ use rust_decimal::{
     Decimal,
 };
 
+#[cfg(not(feature = "local"))]
 declare_id!("C352X1QLENaVNiEbpRQp4fFNRdpWMVW6XZTh9sr4fT75");
+
+#[cfg(feature = "local")]
+declare_id!("6cJU4mUJe1fKXzvvbZjz72M3d5aQXMmRV2jeQerkFw5b");
 
 #[error_code]
 pub enum ErrorCode {
@@ -420,9 +424,11 @@ impl Vesting {
                 .ok_or(ErrorCode::IntegerOverflow)?;
         }
 
+        // 99% == 99_000_000_000 basis points
         // 100% == 100_000_000_000 basis points
         require!(
-            total_percentage == 100 * 10u64.pow(DECIMALS),
+            total_percentage >= 99 * 10u64.pow(DECIMALS)
+                && total_percentage <= 100 * 10u64.pow(DECIMALS),
             PercentageDoesntCoverAllTokens
         );
 

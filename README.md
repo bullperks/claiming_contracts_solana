@@ -19,7 +19,8 @@ https://project-serum.github.io/anchor/getting-started/installation.html#install
 
 ```bash
 anchor build
-anchor test
+# allows you to override local program id
+anchor test -- --features local
 ```
 
 ### Deploy program
