@@ -2,6 +2,7 @@ import * as anchor from '@project-serum/anchor';
 import * as serumCmn from "@project-serum/common";
 import { TokenInstructions } from '@project-serum/serum';
 import { Decimal } from 'decimal.js';
+import * as spl from '@solana/spl-token';
 
 import * as idl from './claiming_factory.json';
 import * as ty from './claiming_factory';
@@ -49,6 +50,7 @@ export type UserDetails = {
 };
 
 const FAILED_TO_FIND_ACCOUNT = "Account does not exist";
+const INVALID_ACCOUNT_OWNER = 'Invalid account owner';
 
 export class Client {
   provider: anchor.Provider;
@@ -97,6 +99,62 @@ export class Client {
       case MAINNET:
         return new anchor.Program(idl, MAINNET_PROGRAM_ID, this.provider);
     }
+  }
+
+  async fetchTokenAccount(account: anchor.web3.PublicKey): Promise<spl.AccountInfo> {
+    const info = await this.provider.connection.getAccountInfo(account);
+    if (info === null) {
+      throw new Error(FAILED_TO_FIND_ACCOUNT);
+    }
+    if (!info.owner.equals(TOKEN_PROGRAM_ID)) {
+      throw new Error(INVALID_ACCOUNT_OWNER);
+    }
+    if (info.data.length != spl.AccountLayout.span) {
+      throw new Error(`Invalid account size`);
+    }
+
+    const accountInfo = spl.AccountLayout.decode(info.data);
+
+    return accountInfo;
+  }
+
+  async createAssociated(mint: anchor.web3.PublicKey):
+    Promise<[anchor.web3.PublicKey, anchor.web3.TransactionInstruction[]]> {
+    const associatedWallet = await anchor.utils.token.associatedAddress({
+      mint,
+      owner: this.provider.wallet.publicKey
+    });
+
+    const instructions = [];
+
+    try {
+      const targetWalletInfo = await this.fetchTokenAccount(associatedWallet);
+      console.log("found associated wallet", targetWalletInfo);
+    } catch (err) {
+      // INVALID_ACCOUNT_OWNER can be possible if the associatedAddress has
+      // already been received some lamports (= became system accounts).
+      // Assuming program derived addressing is safe, this is the only case
+      // for the INVALID_ACCOUNT_OWNER in this code-path
+      if (
+        err.message === FAILED_TO_FIND_ACCOUNT ||
+        err.message === INVALID_ACCOUNT_OWNER
+      ) {
+        instructions.push(
+          spl.Token.createAssociatedTokenAccountInstruction(
+            spl.ASSOCIATED_TOKEN_PROGRAM_ID,
+            TOKEN_PROGRAM_ID,
+            mint,
+            associatedWallet,
+            this.provider.wallet.publicKey,
+            this.provider.wallet.publicKey,
+          )
+        );
+      } else {
+        throw err;
+      }
+    }
+
+    return [associatedWallet, instructions];
   }
 
   /**
@@ -542,10 +600,10 @@ export class Client {
    */
   async claim(
     distributor: anchor.web3.PublicKey,
-    targetWallet: anchor.web3.PublicKey,
     amount: anchor.BN,
     originalWallet: anchor.web3.PublicKey,
     merkleProof: number[][],
+    targetWallet: anchor.web3.PublicKey = undefined,
   ) {
     const instructions = [];
 
@@ -561,6 +619,15 @@ export class Client {
 
     const distributorAccount = await this.program.account.merkleDistributor.fetch(distributor);
     const [vaultAuthority, _vaultBump] = await this.findVaultAuthority(distributor);
+
+    if (targetWallet === undefined) {
+      const vaultAccount = await this.fetchTokenAccount(distributorAccount.vault);
+      const [associatedWallet, ixs] = await this.createAssociated(vaultAccount.mint);
+      targetWallet = associatedWallet;
+      if (ixs.length > 0) {
+        instructions.push(...ixs);
+      }
+    }
 
     const [actualWallet, bump] = await anchor.web3.PublicKey.findProgramAddress(
       [
