@@ -131,10 +131,10 @@ describe('claiming-factory', () => {
 
         await elementClient.claim(
           distributor,
-          chosenUser.tokenAccount,
           merkleElement.amount,
           merkleElement.address,
-          merkleElement.proofs
+          merkleElement.proofs,
+          chosenUser.tokenAccount,
         );
         break;
       } catch (err: any) {
@@ -723,10 +723,10 @@ describe('claiming-factory', () => {
 
             await elementClient.claim(
               this.distributor,
-              newClaimingUser.tokenAccount,
               merkleElement.amount,
               merkleElement.address,
-              merkleElement.proofs
+              merkleElement.proofs,
+              newClaimingUser.tokenAccount,
             );
             break;
           } catch (err: any) {
@@ -773,10 +773,10 @@ describe('claiming-factory', () => {
 
             await elementClient.claim(
               this.distributor,
-              lastClaimingUser.tokenAccount,
               merkleElement.amount,
               merkleElement.address,
-              merkleElement.proofs
+              merkleElement.proofs,
+              lastClaimingUser.tokenAccount,
             );
             break;
           } catch (err: any) {

@@ -114,6 +114,7 @@ export class Client {
     }
 
     const accountInfo = spl.AccountLayout.decode(info.data);
+    accountInfo.mint = new anchor.web3.PublicKey(accountInfo.mint);
 
     return accountInfo;
   }
