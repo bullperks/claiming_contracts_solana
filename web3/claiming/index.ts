@@ -118,14 +118,27 @@ export class Client {
     return accountInfo;
   }
 
+  async associatedAddress({
+    mint,
+    owner,
+  }: {
+    mint: anchor.web3.PublicKey;
+    owner: anchor.web3.PublicKey;
+  }): Promise<anchor.web3.PublicKey> {
+    return (
+      await anchor.web3.PublicKey.findProgramAddress(
+        [owner.toBytes(), TOKEN_PROGRAM_ID.toBytes(), mint.toBytes()],
+        spl.ASSOCIATED_TOKEN_PROGRAM_ID
+      )
+    )[0];
+  }
+
   async createAssociated(mint: anchor.web3.PublicKey):
     Promise<[anchor.web3.PublicKey, anchor.web3.TransactionInstruction[]]> {
-    const associatedWallet = await spl.Token.getAssociatedTokenAddress(
-      spl.ASSOCIATED_TOKEN_PROGRAM_ID,
-      TOKEN_PROGRAM_ID,
+    const associatedWallet = await this.associatedAddress({
       mint,
-      this.provider.wallet.publicKey
-    );
+      owner: this.provider.wallet.publicKey
+    });
 
     const instructions = [];
 
