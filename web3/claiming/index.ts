@@ -120,10 +120,12 @@ export class Client {
 
   async createAssociated(mint: anchor.web3.PublicKey):
     Promise<[anchor.web3.PublicKey, anchor.web3.TransactionInstruction[]]> {
-    const associatedWallet = await anchor.utils.token.associatedAddress({
+    const associatedWallet = await spl.Token.getAssociatedTokenAddress(
+      spl.ASSOCIATED_TOKEN_PROGRAM_ID,
+      TOKEN_PROGRAM_ID,
       mint,
-      owner: this.provider.wallet.publicKey
-    });
+      this.provider.wallet.publicKey
+    );
 
     const instructions = [];
 
