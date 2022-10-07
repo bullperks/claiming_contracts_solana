@@ -1039,6 +1039,54 @@ describe('claiming-factory', () => {
           }
         );
       });
+
+      it('too large schedule', async function () {
+        const now = Date.now() / 1000;
+        const period = {
+          tokenPercentage: new anchor.BN(10_000_000_000),
+          startTs: new anchor.BN(now),
+          intervalSec: new anchor.BN(1),
+          times: new anchor.BN(1),
+          airdropped: true,
+        };
+        // invalid schedule
+        const schedule = Array.from(Array(40)).map(() => period);
+        const r = await setupDistributor(schedule);
+
+        await assert.rejects(
+          async () => {
+            await claim(r.distributor, 2);
+          },
+          (err) => {
+            assert.equal(err.code, 6010);
+            return true;
+          }
+        );
+      });
+
+      it('too too large schedule', async function () {
+        const now = Date.now() / 1000;
+        const period = {
+          tokenPercentage: new anchor.BN(10_000_000_000),
+          startTs: new anchor.BN(now),
+          intervalSec: new anchor.BN(1),
+          times: new anchor.BN(1),
+          airdropped: true,
+        };
+        // invalid schedule
+        const schedule = Array.from(Array(253)).map(() => period);
+        const r = await setupDistributor(schedule);
+
+        await assert.rejects(
+          async () => {
+            await claim(r.distributor, 2);
+          },
+          (err) => {
+            assert.equal(err.code, 6010);
+            return true;
+          }
+        );
+      });
     });
   });
 });

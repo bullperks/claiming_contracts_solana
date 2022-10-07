@@ -231,6 +231,20 @@ export class Client {
    * @returns {Promise<anchor.web3.PublicKey>} Returns the public key of newly created distributor
    */
   async createDistributor(mint: anchor.web3.PublicKey, merkleRoot: number[], schedule: Period[]): Promise<anchor.web3.PublicKey> {
+    // no more than 18 periods in initialize ix
+    if (schedule.length >= 18) {
+      const distributor = await this.createDistributorLarge(mint, merkleRoot, schedule.length);
+      const changes = schedule.map(p => ({push: { period: p }}));
+      let start = 0;
+      while (start < schedule.length) {
+        // no more than 27 periods in update_schedule2 ix
+        const changesSlice = changes.slice(start, start + 27);
+        await this.updateScheduleUnchecked(distributor, changesSlice);
+        start += 27;
+      }
+      return distributor;
+    }
+
     const distributor = anchor.web3.Keypair.generate();
     const [vaultAuthority, vaultBump] = await this.findVaultAuthority(distributor.publicKey);
     const [config, _bump] = await this.findConfigAddress();
@@ -248,6 +262,49 @@ export class Client {
         vaultBump,
         merkleRoot,
         schedule,
+      },
+      {
+        accounts: {
+          distributor: distributor.publicKey,
+          adminOrOwner: this.provider.wallet.publicKey,
+          vaultAuthority,
+          vault: vault.publicKey,
+          config,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        },
+        instructions: createTokenAccountInstrs,
+        signers: [vault, distributor]
+      }
+    );
+
+    return distributor.publicKey;
+  }
+
+  /**
+   * Initializes distributor with schedule larger than 18 periods
+   * @param {anchor.web3.PublicKey} mint - public key of mint to distibute
+   * @param {number[]} merkleRoot
+   * @param {number} periodsCount
+   * @returns {Promise<anchor.web3.PublicKey>} Returns the public key of newly created distributor
+   */
+  async createDistributorLarge(mint: anchor.web3.PublicKey, merkleRoot: number[], periodsCount: number): Promise<anchor.web3.PublicKey> {
+    const distributor = anchor.web3.Keypair.generate();
+    const [vaultAuthority, vaultBump] = await this.findVaultAuthority(distributor.publicKey);
+    const [config, _bump] = await this.findConfigAddress();
+
+    const vault = anchor.web3.Keypair.generate();
+    const createTokenAccountInstrs = await serumCmn.createTokenAccountInstrs(
+      this.program.provider,
+      vault.publicKey,
+      mint,
+      vaultAuthority
+    );
+
+    await this.program.rpc.initialize2(
+      {
+        vaultBump,
+        merkleRoot,
+        periodsCount: new anchor.BN(periodsCount),
       },
       {
         accounts: {
@@ -394,6 +451,28 @@ export class Client {
   async updateSchedule(distributor: anchor.web3.PublicKey, changes: any[]) {
     const [config, _bump] = await this.findConfigAddress();
     await this.program.rpc.updateSchedule(
+      {
+        changes
+      },
+      {
+        accounts: {
+          distributor,
+          config,
+          adminOrOwner: this.provider.wallet.publicKey,
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+        }
+      }
+    );
+  }
+
+  /**
+   * Updates shedule (should be used for schedules larger than 18 periods)
+   * @param {anchor.web3.PublicKey} distributor - public key of distributor, on which tokes were claimed
+   * @param {any[]} changes - new shedule data
+   */
+  async updateScheduleUnchecked(distributor: anchor.web3.PublicKey, changes: any[]) {
+    const [config, _bump] = await this.findConfigAddress();
+    await this.program.rpc.updateSchedule2(
       {
         changes
       },

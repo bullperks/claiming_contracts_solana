@@ -72,6 +72,49 @@
       ]
     },
     {
+      "name": "initialize2",
+      "accounts": [
+        {
+          "name": "config",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "adminOrOwner",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "distributor",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "vaultAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "vault",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": "Initialize2Args"
+          }
+        }
+      ]
+    },
+    {
       "name": "initUserDetails",
       "accounts": [
         {
@@ -109,6 +152,39 @@
     },
     {
       "name": "updateSchedule",
+      "accounts": [
+        {
+          "name": "distributor",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "config",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "adminOrOwner",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "clock",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": "UpdateScheduleArgs"
+          }
+        }
+      ]
+    },
+    {
+      "name": "updateSchedule2",
       "accounts": [
         {
           "name": "distributor",
@@ -606,6 +682,31 @@
                 "defined": "Period"
               }
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Initialize2Args",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vaultBump",
+            "type": "u8"
+          },
+          {
+            "name": "merkleRoot",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "periodsCount",
+            "type": "u64"
           }
         ]
       }

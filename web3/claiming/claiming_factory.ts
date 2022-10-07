@@ -72,6 +72,49 @@ export type ClaimingFactory = {
       ]
     },
     {
+      "name": "initialize2",
+      "accounts": [
+        {
+          "name": "config",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "adminOrOwner",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "distributor",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "vaultAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "vault",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": "Initialize2Args"
+          }
+        }
+      ]
+    },
+    {
       "name": "initUserDetails",
       "accounts": [
         {
@@ -109,6 +152,39 @@ export type ClaimingFactory = {
     },
     {
       "name": "updateSchedule",
+      "accounts": [
+        {
+          "name": "distributor",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "config",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "adminOrOwner",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "clock",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": "UpdateScheduleArgs"
+          }
+        }
+      ]
+    },
+    {
+      "name": "updateSchedule2",
       "accounts": [
         {
           "name": "distributor",
@@ -606,6 +682,31 @@ export type ClaimingFactory = {
                 "defined": "Period"
               }
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Initialize2Args",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vaultBump",
+            "type": "u8"
+          },
+          {
+            "name": "merkleRoot",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "periodsCount",
+            "type": "u64"
           }
         ]
       }
@@ -934,6 +1035,49 @@ export const IDL: ClaimingFactory = {
       ]
     },
     {
+      "name": "initialize2",
+      "accounts": [
+        {
+          "name": "config",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "adminOrOwner",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "distributor",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "vaultAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "vault",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": "Initialize2Args"
+          }
+        }
+      ]
+    },
+    {
       "name": "initUserDetails",
       "accounts": [
         {
@@ -971,6 +1115,39 @@ export const IDL: ClaimingFactory = {
     },
     {
       "name": "updateSchedule",
+      "accounts": [
+        {
+          "name": "distributor",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "config",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "adminOrOwner",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "clock",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": "UpdateScheduleArgs"
+          }
+        }
+      ]
+    },
+    {
+      "name": "updateSchedule2",
       "accounts": [
         {
           "name": "distributor",
@@ -1468,6 +1645,31 @@ export const IDL: ClaimingFactory = {
                 "defined": "Period"
               }
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Initialize2Args",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vaultBump",
+            "type": "u8"
+          },
+          {
+            "name": "merkleRoot",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "periodsCount",
+            "type": "u64"
           }
         ]
       }

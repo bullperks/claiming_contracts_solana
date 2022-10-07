@@ -99,6 +99,22 @@ pub mod claiming_factory {
         Ok(())
     }
 
+    pub fn initialize2(ctx: Context<Initialize2>, args: Initialize2Args) -> Result<()> {
+        let distributor = ctx.accounts.distributor.deref_mut();
+
+        *distributor = MerkleDistributor {
+            merkle_index: 0,
+            merkle_root: args.merkle_root,
+            paused: false,
+            vault_bump: args.vault_bump,
+            vault: ctx.accounts.vault.key(),
+            // schedule unchecked here (will be checked at claim)
+            vesting: Vesting::new_unchecked(vec![]),
+        };
+
+        Ok(())
+    }
+
     pub fn init_user_details(ctx: Context<InitUserDetails>, bump: u8) -> Result<()> {
         let user_details = ctx.accounts.user_details.deref_mut();
 
@@ -124,6 +140,16 @@ pub mod claiming_factory {
         }
 
         distributor.vesting.validate()?;
+
+        Ok(())
+    }
+
+    pub fn update_schedule2(ctx: Context<UpdateSchedule>, args: UpdateScheduleArgs) -> Result<()> {
+        let distributor = &mut ctx.accounts.distributor;
+
+        for change in args.changes {
+            distributor.vesting.apply_change(change);
+        }
 
         Ok(())
     }
@@ -263,6 +289,7 @@ pub mod claiming_factory {
         let user_details = &mut ctx.accounts.user_details;
 
         require!(!distributor.paused, Paused);
+        distributor.vesting.validate()?;
         require!(user_details.claimed_amount < args.amount, AlreadyClaimed);
 
         check_proof(
@@ -400,6 +427,10 @@ impl Vesting {
         Ok(s)
     }
 
+    fn new_unchecked(schedule: Vec<Period>) -> Self {
+        Self { schedule }
+    }
+
     fn validate(&self) -> Result<()> {
         require!(!self.schedule.is_empty(), EmptySchedule);
 
@@ -436,10 +467,13 @@ impl Vesting {
     }
 
     fn has_started(&self, clock: &Sysvar<Clock>) -> bool {
-        let first_period = self.schedule.first().unwrap();
-        let now = clock.unix_timestamp as u64;
-
-        first_period.start_ts <= now
+        match self.schedule.first() {
+            Some(first_period) => {
+                let now = clock.unix_timestamp as u64;
+                first_period.start_ts <= now
+            }
+            None => false,
+        }
     }
 
     fn apply_change(&mut self, change: Change) {
@@ -555,6 +589,10 @@ impl MerkleDistributor {
     pub fn space_required(periods: &[Period]) -> usize {
         8 + std::mem::size_of::<Self>() + periods.len() * std::mem::size_of::<Period>()
     }
+
+    pub fn space_required_2(periods_count: u64) -> usize {
+        8 + std::mem::size_of::<Self>() + periods_count as usize * std::mem::size_of::<Period>()
+    }
 }
 
 #[derive(Accounts)]
@@ -631,6 +669,52 @@ pub struct Initialize<'info> {
         init,
         payer = admin_or_owner,
         space = MerkleDistributor::space_required(&args.schedule),
+    )]
+    distributor: Account<'info, MerkleDistributor>,
+
+    /// CHECK: PDA which is set as vault authority
+    #[account(
+        seeds = [
+            distributor.key().as_ref()
+        ],
+        bump = args.vault_bump
+    )]
+    vault_authority: AccountInfo<'info>,
+    #[account(constraint = vault.owner == vault_authority.key())]
+    vault: Account<'info, TokenAccount>,
+
+    system_program: Program<'info, System>,
+}
+
+#[derive(AnchorDeserialize, AnchorSerialize)]
+pub struct Initialize2Args {
+    pub vault_bump: u8,
+    pub merkle_root: [u8; 32],
+    pub periods_count: u64,
+}
+
+#[derive(Accounts)]
+#[instruction(args: Initialize2Args)]
+pub struct Initialize2<'info> {
+    #[account(
+        seeds = [
+            "config".as_ref()
+        ],
+        bump
+    )]
+    config: Account<'info, Config>,
+    #[account(
+        mut,
+        constraint = admin_or_owner.key() == config.owner ||
+            config.admins.contains(&Some(admin_or_owner.key()))
+            @ ErrorCode::NotAdminOrOwner
+    )]
+    admin_or_owner: Signer<'info>,
+
+    #[account(
+        init,
+        payer = admin_or_owner,
+        space = MerkleDistributor::space_required_2(args.periods_count),
     )]
     distributor: Account<'info, MerkleDistributor>,
 
