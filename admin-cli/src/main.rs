@@ -91,6 +91,10 @@ enum Command {
         #[structopt(long)]
         admin: Pubkey,
     },
+    RemoveAdmin {
+        #[structopt(long)]
+        admin: Pubkey,
+    },
     CreateClaiming {
         #[structopt(long)]
         merkle: String,
@@ -158,6 +162,23 @@ fn main() -> Result<()> {
                     admin,
                 })
                 .args(claiming_factory::instruction::AddAdmin {})
+                .signer(payer.as_ref())
+                .send()?;
+
+            println!("Result:\n{}", r);
+        }
+        Command::RemoveAdmin { admin } => {
+            let (config, _bump) = Pubkey::find_program_address(&["config".as_ref()], &client.id());
+            println!("Config address: {}", config);
+
+            let r = client
+                .request()
+                .accounts(claiming_factory::accounts::RemoveAdmin {
+                    owner: payer.pubkey(),
+                    config,
+                    admin,
+                })
+                .args(claiming_factory::instruction::RemoveAdmin {})
                 .signer(payer.as_ref())
                 .send()?;
 
