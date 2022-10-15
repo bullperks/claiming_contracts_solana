@@ -644,6 +644,41 @@ export class Client {
     return totalPercentageToClaim.mul(totalAmount).div(100).toNumber();
   }
 
+  async getAmountAvailableToWithdraw(
+    distributor: anchor.web3.PublicKey,
+    totalAmount: number
+  ) {
+    const distributorAccount = await this.program.account.merkleDistributor.fetch(distributor);
+    const now = Math.trunc(Date.now() / 1000);
+
+    let totalPercentageToWithdraw = new Decimal(0);
+
+    for (const period of distributorAccount.vesting.schedule) {
+      let periodStartTs = period.startTs.toNumber();
+      let periodTimes = period.times.toNumber();
+
+      if (now <= periodStartTs) {
+        continue;
+      }
+
+      let lastClaimedAtTsAlignedByInterval = lastClaimedAtTs - (lastClaimedAtTs % period.intervalSec.toNumber());
+      let secondsPassed =
+        now - (periodStartTs >= lastClaimedAtTsAlignedByInterval ?
+          periodStartTs : lastClaimedAtTsAlignedByInterval
+        );
+      let intervalsPassed = secondsPassed / period.intervalSec;
+      intervalsPassed = intervalsPassed < periodTimes ? intervalsPassed : periodTimes;
+
+      let percentageForIntervals = new Decimal(period.tokenPercentage.divn(100).toString())
+        .dividedBy(periodTimes)
+        .mul(intervalsPassed);
+
+      totalPercentageToWithdraw = totalPercentageToWithdraw.add(new Decimal(period.tokenPercentage.divn(100).toString()));
+    }
+
+    return totalPercentageToWithdraw.mul(totalAmount).div(100).toNumber();
+  }
+
   /**
    * Claims amount of tokens
    * @param {anchor.web3.PublicKey} distributor - public key of distributor, on which tokes would be claimed
