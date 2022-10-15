@@ -185,6 +185,23 @@ pub mod claiming_factory {
         Ok(())
     }
 
+    pub fn stop_vesting(ctx: Context<StopVesting>) -> Result<()> {
+        let distributor = &mut ctx.accounts.distributor;
+        let now = ctx.accounts.clock.unix_timestamp as u64;
+
+        for period in distributor.vesting.schedule.iter_mut() {
+            // skip all previous or current periods
+            if period.start_ts <= now {
+                continue;
+            }
+
+            // mark every future period as airdropped
+            period.airdropped = true;
+        }
+
+        Ok(())
+    }
+
     pub fn add_admin(ctx: Context<AddAdmin>) -> Result<()> {
         let config = &mut ctx.accounts.config;
         let admin = &ctx.accounts.admin;
@@ -287,10 +304,12 @@ pub mod claiming_factory {
         let vault = &mut ctx.accounts.vault;
         let distributor = &ctx.accounts.distributor;
         let user_details = &mut ctx.accounts.user_details;
+        let now = ctx.accounts.clock.unix_timestamp as u64;
 
         require!(!distributor.paused, Paused);
         distributor.vesting.validate()?;
         require!(user_details.claimed_amount < args.amount, AlreadyClaimed);
+        require!(!distributor.vesting.has_stopped(now), AlreadyClaimed);
 
         check_proof(
             &args.original_wallet,
@@ -301,7 +320,7 @@ pub mod claiming_factory {
 
         let (bps_to_claim, bps_to_add) = distributor
             .vesting
-            .bps_available_to_claim(ctx.accounts.clock.unix_timestamp as u64, user_details)?;
+            .bps_available_to_claim(now, user_details)?;
         let amount = (Decimal::from_u64(args.amount).unwrap() * bps_to_claim)
             .ceil()
             .to_u64()
@@ -488,6 +507,22 @@ impl Vesting {
                 self.schedule.push(period);
             }
         }
+    }
+
+    fn has_stopped(&self, now: u64) -> bool {
+        let mut stopped = true;
+
+        for period in self.schedule.iter() {
+            if period.start_ts <= now {
+                continue;
+            }
+
+            if !period.airdropped {
+                stopped = false;
+            }
+        }
+
+        stopped
     }
 
     fn bps_available_to_claim(
@@ -809,6 +844,27 @@ pub struct SetPaused<'info> {
             @ ErrorCode::NotAdminOrOwner
     )]
     admin_or_owner: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct StopVesting<'info> {
+    #[account(mut)]
+    distributor: Account<'info, MerkleDistributor>,
+    #[account(
+        seeds = [
+            "config".as_ref()
+        ],
+        bump = config.bump
+    )]
+    config: Account<'info, Config>,
+    #[account(
+        constraint = admin_or_owner.key() == config.owner ||
+            config.admins.contains(&Some(admin_or_owner.key()))
+            @ ErrorCode::NotAdminOrOwner
+    )]
+    admin_or_owner: Signer<'info>,
+
+    clock: Sysvar<'info, Clock>,
 }
 
 #[derive(Accounts)]

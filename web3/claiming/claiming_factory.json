@@ -279,6 +279,32 @@
       ]
     },
     {
+      "name": "stopVesting",
+      "accounts": [
+        {
+          "name": "distributor",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "config",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "adminOrOwner",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "clock",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "addAdmin",
       "accounts": [
         {
@@ -969,5 +995,8 @@
       "code": 6018,
       "name": "NotAllowedToChangeWallet"
     }
-  ]
+  ],
+  "metadata": {
+    "address": "6cJU4mUJe1fKXzvvbZjz72M3d5aQXMmRV2jeQerkFw5b"
+  }
 }

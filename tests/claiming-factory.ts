@@ -1087,6 +1087,51 @@ describe('claiming-factory', () => {
           }
         );
       });
+
+      it('should stop vesting', async function () {
+        const now = Date.now() / 1000;
+
+        const r = await setupDistributor([
+          {
+            tokenPercentage: new anchor.BN(10_000_000_000),
+            startTs: new anchor.BN(now),
+            intervalSec: new anchor.BN(1),
+            times: new anchor.BN(1),
+            airdropped: false,
+          },
+          {
+            tokenPercentage: new anchor.BN(30_000_000_000),
+            startTs: new anchor.BN(now + 3),
+            intervalSec: new anchor.BN(1),
+            times: new anchor.BN(1),
+            airdropped: false,
+          },
+          {
+            tokenPercentage: new anchor.BN(60_000_000_000),
+            startTs: new anchor.BN(now + 20),
+            intervalSec: new anchor.BN(1),
+            times: new anchor.BN(1),
+            airdropped: false,
+          }
+        ]);
+
+        // should claim and then see no available funds
+        await claim(r.distributor, 2);
+        await client.stopVesting(r.distributor);
+
+        await assert.rejects(
+          async () => {
+            await claim(r.distributor, 2);
+          },
+          (err) => {
+            assert.equal(err.code, 6004);
+            return true;
+          }
+        );
+
+        const targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUsers[2].tokenAccount);
+        console.log("wallet amount", targetWalletAccount.amount.toNumber());
+      });
     });
   });
 });

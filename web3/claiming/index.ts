@@ -234,7 +234,7 @@ export class Client {
     // no more than 18 periods in initialize ix
     if (schedule.length >= 18) {
       const distributor = await this.createDistributorLarge(mint, merkleRoot, schedule.length);
-      const changes = schedule.map(p => ({push: { period: p }}));
+      const changes = schedule.map(p => ({ push: { period: p } }));
       let start = 0;
       while (start < schedule.length) {
         // no more than 27 periods in update_schedule2 ix
@@ -387,6 +387,24 @@ export class Client {
           distributor,
           config,
           adminOrOwner: this.provider.wallet.publicKey
+        }
+      }
+    );
+  }
+
+  /**
+   * Stop distributor (only for admins)
+   * @param {anchor.web3.PublicKey} distributor -- public key of distributor you want to stop
+   */
+  async stopVesting(distributor: anchor.web3.PublicKey) {
+    const [config, _bump] = await this.findConfigAddress();
+    await this.program.rpc.stopVesting(
+      {
+        accounts: {
+          config,
+          distributor,
+          adminOrOwner: this.provider.wallet.publicKey,
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
         }
       }
     );
