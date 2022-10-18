@@ -655,28 +655,34 @@ export class Client {
 
     for (const period of distributorAccount.vesting.schedule) {
       let periodStartTs = period.startTs.toNumber();
-      let periodTimes = period.times.toNumber();
 
       if (now <= periodStartTs) {
         continue;
       }
 
-      let lastClaimedAtTsAlignedByInterval = lastClaimedAtTs - (lastClaimedAtTs % period.intervalSec.toNumber());
-      let secondsPassed =
-        now - (periodStartTs >= lastClaimedAtTsAlignedByInterval ?
-          periodStartTs : lastClaimedAtTsAlignedByInterval
-        );
-      let intervalsPassed = secondsPassed / period.intervalSec;
-      intervalsPassed = intervalsPassed < periodTimes ? intervalsPassed : periodTimes;
-
-      let percentageForIntervals = new Decimal(period.tokenPercentage.divn(100).toString())
-        .dividedBy(periodTimes)
-        .mul(intervalsPassed);
-
       totalPercentageToWithdraw = totalPercentageToWithdraw.add(new Decimal(period.tokenPercentage.divn(100).toString()));
     }
 
     return totalPercentageToWithdraw.mul(totalAmount).div(100).toNumber();
+  }
+
+  async hasStopped(distributor: anchor.web3.PublicKey) {
+    const distributorAccount = await this.program.account.merkleDistributor.fetch(distributor);
+    const now = Math.trunc(Date.now() / 1000);
+
+    for (const period of distributorAccount.vesting.schedule) {
+      let periodStartTs = period.startTs.toNumber();
+
+      if (now <= periodStartTs) {
+        continue;
+      }
+
+      if (!period.airdropped) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   /**
