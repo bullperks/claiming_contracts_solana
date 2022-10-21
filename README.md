@@ -13,11 +13,12 @@ https://docs.solana.com/cli/install-solana-cli-tools
 
 ### Anchor Installation
 
-https://project-serum.github.io/anchor/getting-started/installation.html#install-yarn
+https://www.anchor-lang.com/docs/installation
 
 ### Run tests
 
 ```bash
+avm use 0.24.2
 anchor build
 # allows you to override local program id
 anchor test -- --features local
