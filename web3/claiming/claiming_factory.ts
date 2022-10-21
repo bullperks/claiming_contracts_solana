@@ -125,10 +125,7 @@ export type ClaimingFactory = {
         {
           "name": "user",
           "isMut": false,
-          "isSigner": false,
-          "docs": [
-            "we can init UserDetails for other user too"
-          ]
+          "isSigner": false
         },
         {
           "name": "userDetails",
@@ -649,10 +646,6 @@ export type ClaimingFactory = {
         "fields": [
           {
             "name": "tokenPercentage",
-            "docs": [
-              "Percentage in kinda Basis Points (BPS). 1% = 1_000_000_000 BPS.",
-              "NOTE: Percentage is for the whole period."
-            ],
             "type": "u64"
           },
           {
@@ -669,10 +662,6 @@ export type ClaimingFactory = {
           },
           {
             "name": "airdropped",
-            "docs": [
-              "We should skip this in claim amount calculation",
-              "because it has been claimed outside of this vesting scope."
-            ],
             "type": "bool"
           }
         ]
@@ -994,6 +983,10 @@ export type ClaimingFactory = {
     {
       "code": 6018,
       "name": "NotAllowedToChangeWallet"
+    },
+    {
+      "code": 6019,
+      "name": "ScheduleStopped"
     }
   ]
 };
@@ -1125,10 +1118,7 @@ export const IDL: ClaimingFactory = {
         {
           "name": "user",
           "isMut": false,
-          "isSigner": false,
-          "docs": [
-            "we can init UserDetails for other user too"
-          ]
+          "isSigner": false
         },
         {
           "name": "userDetails",
@@ -1649,10 +1639,6 @@ export const IDL: ClaimingFactory = {
         "fields": [
           {
             "name": "tokenPercentage",
-            "docs": [
-              "Percentage in kinda Basis Points (BPS). 1% = 1_000_000_000 BPS.",
-              "NOTE: Percentage is for the whole period."
-            ],
             "type": "u64"
           },
           {
@@ -1669,10 +1655,6 @@ export const IDL: ClaimingFactory = {
           },
           {
             "name": "airdropped",
-            "docs": [
-              "We should skip this in claim amount calculation",
-              "because it has been claimed outside of this vesting scope."
-            ],
             "type": "bool"
           }
         ]
@@ -1994,6 +1976,10 @@ export const IDL: ClaimingFactory = {
     {
       "code": 6018,
       "name": "NotAllowedToChangeWallet"
+    },
+    {
+      "code": 6019,
+      "name": "ScheduleStopped"
     }
   ]
 };

@@ -40,6 +40,7 @@ pub enum ErrorCode {
     InvalidIntervalDuration,
     WrongClaimer,
     NotAllowedToChangeWallet,
+    ScheduleStopped,
 }
 
 /// This event is triggered whenever a call to claim succeeds.
@@ -309,7 +310,6 @@ pub mod claiming_factory {
         require!(!distributor.paused, Paused);
         distributor.vesting.validate()?;
         require!(user_details.claimed_amount < args.amount, AlreadyClaimed);
-        require!(!distributor.vesting.has_stopped(now), AlreadyClaimed);
 
         check_proof(
             &args.original_wallet,
@@ -330,7 +330,12 @@ pub mod claiming_factory {
             .ceil()
             .to_u64()
             .unwrap();
-        require!(amount > 0, NothingToClaim);
+
+        if amount == 0 && distributor.vesting.has_stopped(now)? {
+            return Err(ErrorCode::ScheduleStopped.into());
+        } else if amount == 0 {
+            return Err(ErrorCode::NothingToClaim.into());
+        }
 
         let distributor_key = distributor.key();
         let seeds = &[distributor_key.as_ref(), &[distributor.vault_bump]];
@@ -509,20 +514,28 @@ impl Vesting {
         }
     }
 
-    fn has_stopped(&self, now: u64) -> bool {
+    fn has_stopped(&self, now: u64) -> Result<bool> {
         let mut stopped = true;
 
         for period in self.schedule.iter() {
-            if period.start_ts <= now {
+            let period_end_ts = period
+                .times
+                .checked_mul(period.interval_sec)
+                .ok_or(ErrorCode::IntegerOverflow)?
+                .checked_add(period.start_ts)
+                .ok_or(ErrorCode::IntegerOverflow)?;
+
+            if period_end_ts < now {
                 continue;
             }
 
             if !period.airdropped {
                 stopped = false;
+                break;
             }
         }
 
-        stopped
+        Ok(stopped)
     }
 
     fn bps_available_to_claim(

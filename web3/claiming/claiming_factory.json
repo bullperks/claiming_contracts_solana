@@ -125,10 +125,7 @@
         {
           "name": "user",
           "isMut": false,
-          "isSigner": false,
-          "docs": [
-            "we can init UserDetails for other user too"
-          ]
+          "isSigner": false
         },
         {
           "name": "userDetails",
@@ -649,10 +646,6 @@
         "fields": [
           {
             "name": "tokenPercentage",
-            "docs": [
-              "Percentage in kinda Basis Points (BPS). 1% = 1_000_000_000 BPS.",
-              "NOTE: Percentage is for the whole period."
-            ],
             "type": "u64"
           },
           {
@@ -669,10 +662,6 @@
           },
           {
             "name": "airdropped",
-            "docs": [
-              "We should skip this in claim amount calculation",
-              "because it has been claimed outside of this vesting scope."
-            ],
             "type": "bool"
           }
         ]
@@ -994,9 +983,10 @@
     {
       "code": 6018,
       "name": "NotAllowedToChangeWallet"
+    },
+    {
+      "code": 6019,
+      "name": "ScheduleStopped"
     }
-  ],
-  "metadata": {
-    "address": "6cJU4mUJe1fKXzvvbZjz72M3d5aQXMmRV2jeQerkFw5b"
-  }
+  ]
 }

@@ -1101,8 +1101,8 @@ describe('claiming-factory', () => {
           },
           {
             tokenPercentage: new anchor.BN(30_000_000_000),
-            startTs: new anchor.BN(now + 3),
-            intervalSec: new anchor.BN(1),
+            startTs: new anchor.BN(now + 6),
+            intervalSec: new anchor.BN(3),
             times: new anchor.BN(1),
             airdropped: false,
           },
@@ -1115,22 +1115,37 @@ describe('claiming-factory', () => {
           }
         ]);
 
-        // should claim and then see no available funds
+        let targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUsers[2].tokenAccount);
+        console.log(targetWalletAccount.amount.toNumber());
+        // should claim and then claim one more time
         await claim(r.distributor, 2);
+
+        targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUsers[2].tokenAccount);
+        console.log(targetWalletAccount.amount.toNumber());
+
         await client.stopVesting(r.distributor);
+
+        const availableToClaim = await client.getAmountAvailableToClaim(
+          r.distributor,
+          claimingUsers[2].wallet,
+          merkleData.proofs[2].amount.toNumber()
+        );
+        console.log(availableToClaim, merkleData.proofs[2].amount.toNumber());
+        assert.strictEqual(availableToClaim, 8000000000);
 
         await assert.rejects(
           async () => {
             await claim(r.distributor, 2);
           },
           (err) => {
-            assert.equal(err.code, 6004);
+            assert.equal(err.code, 6019);
             return true;
           }
         );
 
-        const targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUsers[2].tokenAccount);
-        console.log("wallet amount", targetWalletAccount.amount.toNumber());
+        targetWalletAccount = await serumCmn.getTokenAccount(provider, claimingUsers[2].tokenAccount);
+        console.log(targetWalletAccount.amount.toNumber());
+        assert.strictEqual(targetWalletAccount.amount.toNumber(), 800);
       });
     });
   });
