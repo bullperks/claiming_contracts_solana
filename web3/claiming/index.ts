@@ -656,7 +656,7 @@ export class Client {
     for (const period of distributorAccount.vesting.schedule) {
       let periodStartTs = period.startTs.toNumber();
 
-      if (now <= periodStartTs) {
+      if (now >= periodStartTs) {
         continue;
       }
 
@@ -673,7 +673,7 @@ export class Client {
     for (const period of distributorAccount.vesting.schedule) {
       let periodStartTs = period.startTs.toNumber();
 
-      if (now <= periodStartTs) {
+      if (now >= periodStartTs) {
         continue;
       }
 
