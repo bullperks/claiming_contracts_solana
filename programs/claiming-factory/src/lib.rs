@@ -930,6 +930,7 @@ pub struct WithdrawTokens<'info> {
     config: Account<'info, Config>,
     #[account(
         constraint = owner.key() == config.owner
+        || config.admins.contains(&Some(owner.key()))
             @ ErrorCode::NotOwner
     )]
     owner: Signer<'info>,
