@@ -269,20 +269,6 @@ describe('claiming-factory', () => {
         );
       });
 
-      it("shouldn't allow withdraw by admin", async function () {
-        const targetWallet = await serumCmn.createTokenAccount(adminClient.provider, mint.publicKey, admin.publicKey);
-
-        await assert.rejects(
-          async () => {
-            await adminClient.withdrawTokens(new anchor.BN(100), this.distributor, targetWallet);
-          },
-          (err) => {
-            assert.equal(err.code, 6005);
-            return true;
-          }
-        );
-      });
-
       it("should withdraw token by owner", async function () {
         const targetWallet = await serumCmn.createTokenAccount(provider, mint.publicKey, user.publicKey);
         await client.withdrawTokens(new anchor.BN(100), this.distributor, targetWallet);
