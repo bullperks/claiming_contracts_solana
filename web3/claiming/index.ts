@@ -621,6 +621,10 @@ export class Client {
         break;
       }
 
+      if (period.airdropped) {
+        continue;
+      }
+
       let periodEndTs = periodStartTs + periodTimes * period.intervalSec.toNumber();
       if (periodEndTs <= lastClaimedAtTs) {
         continue;
