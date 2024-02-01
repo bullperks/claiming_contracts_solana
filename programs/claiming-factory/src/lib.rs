@@ -371,6 +371,41 @@ pub mod claiming_factory {
 
         Ok(())
     }
+    // function to create a refund request
+    pub fn request_refund(&mut self, user_wallet: Pubkey) -> ProgramResult {
+        // Check if the deadline for refund requests has passed
+        if Clock::get()? > self.refund_deadline {
+            return Err(ProgramError::DeadlineExceeded);
+        }
+    
+        // Check if the user has already claimed tokens
+        if self.claimed_tokens.contains(&user_wallet) {
+            return Err(ProgramError::InvalidState);
+        }
+    
+        // Add the user's wallet to the refund list
+        self.refund_wallets.push(user_wallet);
+        Ok(())
+    }
+
+    pub fn get_refund_wallets(&self) -> Vec<Pubkey> {
+        self.refund_wallets.clone()
+    }
+
+    // make only admin callable function
+    pub fn process_refunds(&mut self) -> ProgramResult {
+        // Check if the refund deadline has passed
+        if Clock::get()? <= self.refund_deadline {
+            return Err(ProgramError::DeadlineNotReached);
+        }
+    
+        // Remove refund wallets 
+        for wallet in &self.refund_wallets {
+            self.claimed_tokens.remove(wallet);
+        }
+    
+        Ok(())
+    }
 }
 
 fn check_proof(
