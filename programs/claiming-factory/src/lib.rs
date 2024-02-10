@@ -41,6 +41,9 @@ pub enum ErrorCode {
     WrongClaimer,
     NotAllowedToChangeWallet,
     ScheduleStopped,
+    RefundRequestExists,
+    RefundDeadlinePassed,
+    RefundRequestMissing,
 }
 
 /// This event is triggered whenever a call to claim succeeds.
@@ -95,6 +98,7 @@ pub mod claiming_factory {
             vault: ctx.accounts.vault.key(),
             // schedule should pass validation first
             vesting: Vesting::new(args.schedule)?,
+            refundList: RefundList::init(args.deadline)?,
         };
 
         Ok(())
@@ -111,6 +115,7 @@ pub mod claiming_factory {
             vault: ctx.accounts.vault.key(),
             // schedule unchecked here (will be checked at claim)
             vesting: Vesting::new_unchecked(vec![]),
+            refundList: RefundList::init(args.deadline)?,
         };
 
         Ok(())
@@ -610,6 +615,71 @@ impl Vesting {
 }
 
 #[account]
+#[derive(Debug)]
+pub struct RefundList {
+  pub deadline: i64,
+  pub claimed: Vec<Pubkey>,
+  pub requested: Vec<Pubkey>,
+  pub claimed_amount: u64,
+}
+
+impl RefundList {
+    pub fn init(deadline: i64) -> Result<Self> {
+        let s = Self { 
+            deadline: deadline,
+            claimed: Vec::new(),
+            requested: Vec::new(),
+            claimed_amount: 0
+         };
+
+        Ok(s)
+    }
+  
+    pub fn request_refund(&mut self, user: Pubkey) -> Result<()> {
+      if self.deadline > Clock::get()?.unix_timestamp {
+        if !self.requested.contains(&user) && !self.claimed.contains(&user) {
+          self.requested.push(user);
+          Ok(())
+        } else {
+            return Err(ErrorCode::RefundRequestExists.into());
+        }
+      } else {
+        return Err(ErrorCode::RefundDeadlinePassed.into());
+      }
+    }
+  
+    pub fn claim_tokens(&mut self, user: Pubkey, amount:u64) -> Result<()> {
+        if self.deadline > Clock::get()?.unix_timestamp{
+            if self.requested.contains(&user) {
+                self.requested.retain(|w| *w != user);
+                self.claimed_amount += amount;
+                self.claimed.push(user);
+                Ok(())
+            } else {
+                return Err(ErrorCode::RefundRequestMissing.into());
+            }
+        } else {
+            return Err(ErrorCode::RefundDeadlinePassed.into());
+        }
+    }
+  
+    pub fn withdraw_unclaimable(&mut self, token_account: AccountInfo, wallet: Pubkey) -> Result<()> {
+        //TODO: code to withdraw tokens
+        
+        // Reset unclaimable amount
+        self.claimed_amount = 0;
+        self.claimed= Vec::new();
+        self.requested= Vec::new();
+        Ok(())
+    }
+
+    pub fn fetch_wallets(&mut self) -> Vec<Pubkey>{
+        self.requested.clone()
+    }
+  }
+
+
+#[account]
 pub struct ActualWallet {
     original: Pubkey,
     actual: Pubkey,
@@ -631,6 +701,7 @@ pub struct MerkleDistributor {
     pub vault_bump: u8,
     pub vault: Pubkey,
     pub vesting: Vesting,
+    pub refundList: RefundList,
 }
 
 impl MerkleDistributor {
@@ -693,6 +764,7 @@ pub struct InitializeArgs {
     pub vault_bump: u8,
     pub merkle_root: [u8; 32],
     pub schedule: Vec<Period>,
+    pub deadline: i64,
 }
 
 #[derive(Accounts)]
@@ -739,6 +811,7 @@ pub struct Initialize2Args {
     pub vault_bump: u8,
     pub merkle_root: [u8; 32],
     pub periods_count: u64,
+    pub deadline: i64,
 }
 
 #[derive(Accounts)]
