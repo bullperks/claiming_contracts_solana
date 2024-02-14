@@ -41,6 +41,7 @@ pub enum ErrorCode {
     WrongClaimer,
     NotAllowedToChangeWallet,
     ScheduleStopped,
+    RefundDeadlinePassed,
 }
 
 /// This event is triggered whenever a call to claim succeeds.
@@ -304,9 +305,14 @@ pub mod claiming_factory {
     pub fn claim(ctx: Context<Claim>, args: ClaimArgs) -> Result<()> {
         let vault = &mut ctx.accounts.vault;
         let distributor = &ctx.accounts.distributor;
+        let clock = &ctx.accounts.clock;
+
         let user_details = &mut ctx.accounts.user_details;
         let now = ctx.accounts.clock.unix_timestamp as u64;
-
+        require!(
+                clock.unix_timestamp as i64 <= distributor.refund_deadline,
+                RefundDeadlinePassed
+            );
         require!(!distributor.paused, Paused);
         distributor.vesting.validate()?;
         require!(user_details.claimed_amount < args.amount, AlreadyClaimed);
@@ -371,6 +377,109 @@ pub mod claiming_factory {
 
         Ok(())
     }
+
+    pub fn request_refund(ctx: Context<RequestRefund>, bump: u8) -> Result<()> {
+        let refund_request = &mut ctx.accounts.refund_request;
+        refund_request.user = ctx.accounts.user.key();
+        refund_request.refund_requested_at = ctx.accounts.clock.unix_timestamp as i64;
+
+        Ok(())
+    }
+
+    pub fn get_refund_requests(ctx: Context<GetRefundInfo>) -> Vec<Pubkey> {
+        let refund_requests = ctx.accounts.refund_requests.to_account_info().data.borrow();
+        let refund_requests: Vec<RefundInfo> = bincode::deserialize(refund_requests).unwrap();
+
+        refund_requests.into_iter().map(|rr| rr.user).collect()
+    }
+
+    pub fn remove_refund_requests(ctx: Context<RemoveRefundInfo>, refund_requests: Vec<Pubkey>) -> Result<()> {
+        let refund_requests_account = &mut ctx.accounts.refund_requests;
+        refund_requests_account.remove_refund_requests(refund_requests)?;
+
+        Ok(())
+    }
+
+    // pub fn remove_refund_requests(&mut self, refund_requests: Vec<Pubkey>) -> Result<()> {
+    //     let mut refund_requests_iter = self.refund_requests.iter_mut();
+    //     let mut refund_requests_to_remove: Vec<usize> = Vec::new();
+
+    //     for (i, refund_request) in refund_requests_iter.enumerate() {
+    //         if refund_requests.contains(&refund_request.user) {
+    //             refund_requests_to_remove.push(i);
+    //         }
+    //     }
+
+    //     for index in refund_requests_to_remove.into_iter().rev() {
+    //         refund_requests.remove(index);
+    //     }
+
+    //     Ok(())
+    // }
+
+    pub fn withdraw_refunds(ctx: Context<WithdrawRefunds>, amount: u64) -> Result<()> {
+        let vault = &mut ctx.accounts.vault;
+        let distributor = &ctx.accounts.distributor;
+
+        let distributor_key = distributor.key();
+        let seeds = &[distributor_key.as_ref(), &[distributor.vault_bump]];
+        let signers = &[&seeds[..]];
+
+        TokenTransfer {
+            amount,
+            from: vault,
+            to: &ctx.accounts.project_wallet,
+            authority: &ctx.accounts.vault_authority,
+            token_program: &ctx.accounts.token_program,
+            signers: Some(signers),
+        }
+        .make()?;
+
+        Ok(())
+    }
+
+    pub fn calculate_unclaimable_amount(ctx: Context<CalculateUnclaimableAmount>, refund_requests: Vec<Pubkey>) -> u64 {
+        let distributor = &ctx.accounts.distributor;
+        let clock = &ctx.accounts.clock;
+
+        let mut unclaimable_amount = 0;
+
+        for refund_request in refund_requests {
+            let user_details = &mut ctx.accounts.user_details;
+            let user_details_refund_requested_at = user_details.refund_requested_at;
+
+            if user_details_refund_requested_at > 0 && user_details_refund_requested_at < clock.unix_timestamp as i64 {
+                let (bps_to_claim, _) = distributor
+                    .vesting
+                    .bps_available_to_claim(clock.unix_timestamp as u64, user_details)?;
+                unclaimable_amount += (Decimal::from_u64(user_details.claimed_amount).unwrap() * Decimal::from_u64(bps_to_claim).unwrap()).to_u64().unwrap();
+            }
+
+            user_details.refund_requested_at = 0;
+            user_details.claimed_amount = 0;
+        }
+
+        unclaimable_amount
+    }
+
+    pub fn update_refund_requested_at(ctx: Context<UpdateRefundInfoedAt>, refund_requested_at: i64) -> Result<()> {
+        let user_details = &mut ctx.accounts.user_details;
+        user_details.refund_requested_at = refund_requested_at;
+
+        Ok(())
+    }
+
+    pub fn update_refund_deadline(ctx: Context<UpdateRefundDeadline>, refund_deadline: i64) -> Result<()> {
+        let clock = Clock::get()?; 
+        let distributor = &mut ctx.accounts.distributor;
+        require!(
+            refund_deadline >= clock.unix_timestamp,
+            ErrorCode::IntegerOverflow
+        );
+        distributor.refund_deadline = refund_deadline;
+
+        Ok(())
+    }
 }
 
 fn check_proof(
@@ -397,6 +506,126 @@ fn check_proof(
 
     Ok(())
 }
+
+#[account]
+pub struct RefundInfo {
+    user: Pubkey,
+    refund_requested_at: i64,
+}
+
+#[derive(Accounts)]
+pub struct RequestRefund<'info> {
+    #[account(mut)]
+    user: Signer<'info>,
+    #[account(
+        init,
+        payer = user,
+        space = RefundInfo::LEN,
+        seeds = [
+            b"refund-request",
+            user.key().as_ref(),
+        ],
+        bump,
+    )]
+    refund_request: Account<'info, RefundInfo>,
+    system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct GetRefundInfo<'info> {
+    #[account(
+        seeds = [
+            b"refund-requests",
+        ],
+        bump,
+    )]
+    refund_requests: Account<'info, RefundInfo>,
+}
+
+#[derive(Accounts)]
+pub struct RemoveRefundInfo<'info> {
+    #[account(
+        mut,
+        seeds = [
+            b"refund-requests",
+        ],
+        bump,
+    )]
+    refund_requests: Account<'info, RefundInfo>,
+}
+
+// impl Vec<Pubkey> {
+    
+// }
+
+#[derive(Accounts)]
+pub struct WithdrawRefunds<'info> {
+    #[account(
+        mut,
+        constraint = vault.mint == token_program.mint
+    )]
+    vault: Account<'info, TokenAccount>,
+    distributor: Account<'info, MerkleDistributor>,
+    #[account(
+        mut,
+        constraint = project_wallet.owner == admin.key()
+    )]
+    project_wallet: Account<'info, TokenAccount>,
+    vault_authority: AccountInfo<'info>,
+    token_program: Program<'info, Token>,
+    admin: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct UpdateRefundInfoedAt<'info> {
+    #[account(
+        mut,
+        seeds = [
+            distributor.key().as_ref(),
+            distributor.merkle_index.to_be_bytes().as_ref(),
+            user.key().as_ref(),
+        ],
+        bump = user_details.bump,
+    )]
+    user_details: Account<'info, UserDetails>,
+    user: Signer<'info>,
+    distributor: Account<'info, MerkleDistributor>,
+}
+#[derive(Accounts)]
+pub struct CalculateUnclaimableAmount<'info> {
+    distributor: Account<'info, MerkleDistributor>,
+    clock: Sysvar<'info, Clock>,
+    #[account(
+        mut,
+        seeds = [
+            distributor.key().as_ref(),
+            distributor.merkle_index.to_be_bytes().as_ref(),
+            user.key().as_ref(),
+        ],
+        bump = user_details.bump,
+    )]
+    user_details: Account<'info, UserDetails>,
+    user: Signer<'info>,
+}
+
+#[derive(AnchorDeserialize, AnchorSerialize)]
+pub struct UpdateRefundDeadline<'info> {
+    refund_deadline: i64,
+    clock: Sysvar<'info, Clock>,
+}
+
+// #[derive(Accounts)]
+// pub struct UpdateRefundDeadline<'info> {
+//     #[account(
+//         mut,
+//         constraint = admin.key() == distributor.owner
+//     )]
+//     distributor: Account<'info, MerkleDistributor>,
+//     admin: Signer<'info>,
+//     clock: Sysvar<'info, Clock>,
+// }
+
+
 
 #[account]
 #[derive(Debug)]
@@ -631,6 +860,7 @@ pub struct MerkleDistributor {
     pub vault_bump: u8,
     pub vault: Pubkey,
     pub vesting: Vesting,
+    pub refund_deadline: i64,
 }
 
 impl MerkleDistributor {
