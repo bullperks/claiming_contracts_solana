@@ -615,10 +615,7 @@ pub struct UpdateRefundDeadline<'info> {
     admin: Signer<'info>,
 }
 
-#[account]
-pub struct MerkleDistributor {
-    refund_deadline: i64,
-}
+
 
 #[account]
 #[derive(Debug)]
@@ -853,6 +850,7 @@ pub struct MerkleDistributor {
     pub vault_bump: u8,
     pub vault: Pubkey,
     pub vesting: Vesting,
+    refund_deadline: i64,
 }
 
 impl MerkleDistributor {
