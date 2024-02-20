@@ -1,6 +1,7 @@
 use std::rc::Rc;
 
 use anchor_client::{
+    solana_client::rpc_client::RpcClient,
     solana_sdk::{
         commitment_config::CommitmentConfig, pubkey::Pubkey, signature::read_keypair_file,
     },
@@ -9,7 +10,9 @@ use anchor_client::{
 use anyhow::{anyhow, Result};
 
 use serde::{Deserialize, Serialize};
-use solana_sdk::{program_pack::Pack, signature::Keypair, signer::Signer};
+use solana_sdk::{
+    program_pack::Pack, signature::Keypair, signer::Signer, transaction::Transaction,
+};
 use structopt::StructOpt;
 
 #[derive(Debug)]
@@ -102,6 +105,8 @@ enum Command {
         mint: Pubkey,
         #[structopt(long)]
         schedule: String,
+        #[structopt(long)]
+        refund_deadline_ts: Option<u64>,
     },
     ShowClaiming {
         #[structopt(long)]
@@ -131,7 +136,7 @@ fn main() -> Result<()> {
             let (config, bump) = Pubkey::find_program_address(&["config".as_ref()], &client.id());
             println!("Config address: {}", config);
 
-            let r = client
+            let req = client
                 .request()
                 .accounts(claiming_factory::accounts::InitializeConfig {
                     system_program: solana_sdk::system_program::id(),
@@ -139,9 +144,22 @@ fn main() -> Result<()> {
                     config,
                 })
                 .args(claiming_factory::instruction::InitializeConfig { bump })
-                .signer(payer.as_ref())
-                .send()?;
+                .signer(payer.as_ref());
 
+            let rpc_client = RpcClient::new("https://api.mainnet-beta.solana.com");
+
+            let instructions = req.instructions()?;
+            let tx = {
+                let latest_hash = rpc_client.get_latest_blockhash()?;
+                Transaction::new_signed_with_payer(
+                    &instructions,
+                    Some(&payer.pubkey()),
+                    &[payer.as_ref()],
+                    latest_hash,
+                )
+            };
+
+            let r = rpc_client.send_and_confirm_transaction(&tx).unwrap();
             println!("Result:\n{}", r);
         }
         Command::ShowConfig {} => {
@@ -188,6 +206,7 @@ fn main() -> Result<()> {
             merkle,
             mint,
             schedule,
+            refund_deadline_ts,
         } => {
             let merkle: MerkleData = serde_json::from_str(&merkle)?;
             println!("{:?}", merkle);
@@ -285,6 +304,7 @@ fn main() -> Result<()> {
                         vault_bump,
                         merkle_root: merkle.data,
                         schedule,
+                        refund_deadline_ts,
                     },
                 })
                 .signer(payer.as_ref())
