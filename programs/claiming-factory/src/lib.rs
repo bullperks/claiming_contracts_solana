@@ -1,5 +1,7 @@
-use std::ops::DerefMut;
 
+use std::mem::size_of;
+use std::ops::DerefMut;
+use std::str::FromStr;
 use anchor_lang::{
     prelude::*,
     solana_program::{
@@ -14,7 +16,7 @@ use rust_decimal::{
 };
 
 #[cfg(not(feature = "local"))]
-declare_id!("H6FcsVrrgPPnTP9XicYMvLPVux9HsGSctTAwvaeYfykD");
+declare_id!("C352X1QLENaVNiEbpRQp4fFNRdpWMVW6XZTh9sr4fT75");
 
 #[cfg(feature = "local")]
 declare_id!("6cJU4mUJe1fKXzvvbZjz72M3d5aQXMmRV2jeQerkFw5b");
@@ -41,11 +43,10 @@ pub enum ErrorCode {
     WrongClaimer,
     NotAllowedToChangeWallet,
     ScheduleStopped,
-    InvalidSchedule,
-    PeriodDurationIncreased,
-    TokenPercentageIncreased,
-    RefundRequested,
-    RefundDeadlineIsOver,
+    #[msg("Deadline expired!")]
+    DeadlineExpiredForRefund,
+    #[msg("Ensure the amount is above 0.")]
+    InvlaidAmount,
 }
 
 /// This event is triggered whenever a call to claim succeeds.
@@ -74,6 +75,12 @@ pub struct TokensWithdrawn {
 #[program]
 pub mod claiming_factory {
     use anchor_lang::AccountsClose;
+    // Define Admin public key here
+    pub const ADMIN:&str="DatpvACGfVEt322aJvrNUM5gHo7z7L3jm3TgpADEW3Bg";
+    
+    // Time is in seconds
+    // To add limit of 1 hour, add 1 * 60 * 60
+    pub const REFUND_TIME_LIMIT:i64=3600;
 
     use super::*;
 
@@ -98,10 +105,9 @@ pub mod claiming_factory {
             paused: false,
             vault_bump: args.vault_bump,
             vault: ctx.accounts.vault.key(),
-            refund_deadline_ts: args.refund_deadline_ts,
-            extra: [0; 16],
             // schedule should pass validation first
             vesting: Vesting::new(args.schedule)?,
+            refund_expiry: 0,
         };
 
         Ok(())
@@ -116,10 +122,9 @@ pub mod claiming_factory {
             paused: false,
             vault_bump: args.vault_bump,
             vault: ctx.accounts.vault.key(),
-            refund_deadline_ts: args.refund_deadline_ts,
-            extra: [0; 16],
             // schedule unchecked here (will be checked at claim)
             vesting: Vesting::new_unchecked(vec![]),
+            refund_expiry: args.refund_expiry,
         };
 
         Ok(())
@@ -207,72 +212,6 @@ pub mod claiming_factory {
 
             // mark every future period as airdropped
             period.airdropped = true;
-        }
-
-        Ok(())
-    }
-
-    pub fn stop_vesting2(ctx: Context<StopVesting>) -> Result<()> {
-        let distributor = &mut ctx.accounts.distributor;
-        let now = ctx.accounts.clock.unix_timestamp as u64;
-
-        let mut seen_current_period = false;
-
-        for period in distributor.vesting.schedule.iter_mut() {
-            let period_end_ts = period.end_ts()?;
-            // skip all previous periods
-            if period_end_ts < now {
-                continue;
-            }
-
-            if period.start_ts > now {
-                // mark every future period as airdropped
-                period.airdropped = true;
-                continue;
-            }
-
-            // there should be only one current period
-            require!(!seen_current_period, InvalidSchedule);
-            seen_current_period = true;
-
-            // re-scale current period to leave just already vested amount
-            let old_period_duration = period_end_ts
-                .checked_sub(period.start_ts)
-                .ok_or(ErrorCode::EmptyPeriod)?;
-
-            period.times = 1;
-            period.interval_sec = now
-                .checked_sub(period.start_ts)
-                .ok_or(ErrorCode::EmptyPeriod)?;
-
-            let new_period_duration = period.interval_sec;
-
-            // we can't make period longer
-            require!(
-                new_period_duration <= old_period_duration,
-                PeriodDurationIncreased
-            );
-
-            let old_token_percentage = period.token_percentage;
-
-            let scale_ratio = Decimal::from_u64(new_period_duration)
-                .ok_or(ErrorCode::IntegerOverflow)?
-                / Decimal::from_u64(old_period_duration).ok_or(ErrorCode::IntegerOverflow)?;
-
-            // we don't need token_percentage as fraction here, just as the Decimal u64 which
-            // can be multiplied by scale ratio
-            let new_token_percentage = Decimal::from_u64(period.token_percentage)
-                .ok_or(ErrorCode::IntegerOverflow)?
-                * scale_ratio;
-
-            period.token_percentage = new_token_percentage
-                .to_u64()
-                .ok_or(ErrorCode::IntegerOverflow)?;
-
-            require!(
-                period.token_percentage <= old_token_percentage,
-                TokenPercentageIncreased
-            );
         }
 
         Ok(())
@@ -376,80 +315,22 @@ pub mod claiming_factory {
         Ok(())
     }
 
-    pub fn init_refund_request(ctx: Context<InitRefundRequest>) -> Result<()> {
-        require!(
-            ctx.accounts.user_details.claimed_amount == 0,
-            AlreadyClaimed
-        );
-
-        if let Some(refund_deadline_ts) = ctx.accounts.distributor.refund_deadline_ts {
-            let now = Clock::get()?.unix_timestamp as u64;
-            if now > refund_deadline_ts {
-                // refund deadline is over, so can't create refund request now
-                return Err(ErrorCode::RefundDeadlineIsOver.into());
-            }
-        }
-
-        let refund_request = ctx.accounts.refund_request.deref_mut();
-
-        *refund_request = RefundRequest {
-            distributor: ctx.accounts.distributor.key(),
-            user: ctx.accounts.user.key(),
-            active: true,
-        };
-
-        Ok(())
-    }
-
-    pub fn cancel_refund_request(ctx: Context<CancelRefundRequest>) -> Result<()> {
-        let refund_request = ctx.accounts.refund_request.deref_mut();
-
-        if let Some(refund_deadline_ts) = ctx.accounts.distributor.refund_deadline_ts {
-            let now = Clock::get()?.unix_timestamp as u64;
-            if now > refund_deadline_ts {
-                // refund deadline is over, so can't cancel refund request now
-                return Err(ErrorCode::RefundDeadlineIsOver.into());
-            }
-        }
-
-        refund_request.active = false;
-
-        Ok(())
-    }
-
     pub fn claim(ctx: Context<Claim>, args: ClaimArgs) -> Result<()> {
         let vault = &mut ctx.accounts.vault;
         let distributor = &ctx.accounts.distributor;
         let user_details = &mut ctx.accounts.user_details;
+        let refund_claim_request=& mut ctx.accounts.refund_claim_request;
+
         let now = ctx.accounts.clock.unix_timestamp as u64;
+
+        if (refund_claim_request.time_stamp+REFUND_TIME_LIMIT)< now as i64
+        {
+            return err!(ErrorCode::DeadlineExpiredForRefund);
+        }
 
         require!(!distributor.paused, Paused);
         distributor.vesting.validate()?;
         require!(user_details.claimed_amount < args.amount, AlreadyClaimed);
-
-        let mut refund_request = None;
-        if let Some(refund_deadline_ts) = distributor.refund_deadline_ts {
-            match Account::<RefundRequest>::try_from(&ctx.accounts.refund_request) {
-                Ok(refund_request_account) => {
-                    // refund request exists, now should check refund deadline
-                    if now > refund_deadline_ts && refund_request_account.active {
-                        // refund deadline is over, didn't claim before, so can't claim anymore
-                        return Err(ErrorCode::RefundRequested.into());
-                    }
-
-                    refund_request = Some(refund_request_account);
-                }
-                Err(Error::AnchorError(e))
-                    if e.error_code_number
-                        == anchor_lang::error::ErrorCode::AccountNotInitialized.into() =>
-                {
-                    // refund request doesn't exist, proceed
-                }
-                Err(err) => {
-                    return Err(err);
-                }
-            }
-        }
 
         check_proof(
             &args.original_wallet,
@@ -502,10 +383,6 @@ pub mod claiming_factory {
 
         user_details.last_claimed_at_ts = ctx.accounts.clock.unix_timestamp as u64;
 
-        if let Some(mut refund_request) = refund_request {
-            refund_request.active = false;
-        }
-
         emit!(Claimed {
             merkle_index: distributor.merkle_index,
             account: ctx.accounts.user.key(),
@@ -513,6 +390,22 @@ pub mod claiming_factory {
             amount,
         });
 
+        Ok(())
+    }
+    pub fn refund_claim_request(ctx:Context<RequestRefundClaim>,amount:u64)->Result<()>
+    {
+        let clock = Clock::get()?;
+        let request: &mut Account<'_, RefundClaimRequest> = &mut ctx.accounts.refund_claim_request;
+        request.amount=amount;
+        request.claimant = ctx.accounts.claimant.key(); 
+        request.time_stamp = clock.unix_timestamp as i64;
+        Ok(())
+    }
+    pub fn remove_refund(ctx:Context<RemoveRefundRequest>)->Result<()>
+    {
+        let admin_stats=&mut ctx.accounts.admin_stats;
+        admin_stats.un_claimed_amount=admin_stats.un_claimed_amount+ctx.accounts.refund_claim_request.amount;
+        msg!("removed by admin!");
         Ok(())
     }
 }
@@ -523,7 +416,7 @@ fn check_proof(
     root: &[u8],
     proof: &[[u8; 32]],
 ) -> Result<()> {
-    let leaf = [&original_wallet.to_bytes()[..], &amount.to_be_bytes()];
+    let leaf: [&[u8]; 2] = [&original_wallet.to_bytes()[..], &amount.to_be_bytes()];
     let leaf = keccak::hashv(&leaf).0;
 
     let mut computed_hash = leaf;
@@ -566,6 +459,16 @@ impl UserDetails {
     pub const LEN: usize = 8 + std::mem::size_of::<Self>();
 }
 
+// We can also use 'UserDetails'.To avoid conflicts, we will continue to use 'RefundClaimRequest' as both have similar members.
+#[account]
+pub struct RefundClaimRequest {
+    claimant: Pubkey,
+    amount:u64,
+    time_stamp:i64,
+    //Additional parameters can be added here for other refund information.
+}
+
+
 const DECIMALS: u32 = 9;
 
 #[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
@@ -579,23 +482,6 @@ pub struct Period {
     /// We should skip this in claim amount calculation
     /// because it has been claimed outside of this vesting scope.
     pub airdropped: bool,
-}
-
-impl Period {
-    fn end_ts(&self) -> Result<u64> {
-        let end_ts = self
-            .times
-            .checked_mul(self.interval_sec)
-            .ok_or(ErrorCode::IntegerOverflow)?
-            .checked_add(self.start_ts)
-            .ok_or(ErrorCode::IntegerOverflow)?;
-
-        Ok(end_ts)
-    }
-
-    fn token_percentage_as_decimal(&self) -> Decimal {
-        Decimal::new(self.token_percentage as i64, DECIMALS + 2)
-    }
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Debug, Clone)]
@@ -627,7 +513,13 @@ impl Vesting {
             require!(entry.interval_sec > 0, InvalidIntervalDuration);
             require!(last_start_ts < entry.start_ts, InvalidScheduleOrder);
 
-            last_start_ts = entry.end_ts()?;
+            // start_ts + (times * interval_sec)
+            last_start_ts = entry
+                .times
+                .checked_mul(entry.interval_sec)
+                .ok_or(ErrorCode::IntegerOverflow)?
+                .checked_add(entry.start_ts)
+                .ok_or(ErrorCode::IntegerOverflow)?;
 
             total_percentage = total_percentage
                 .checked_add(entry.token_percentage)
@@ -673,7 +565,14 @@ impl Vesting {
         let mut stopped = true;
 
         for period in self.schedule.iter() {
-            if period.end_ts()? < now {
+            let period_end_ts = period
+                .times
+                .checked_mul(period.interval_sec)
+                .ok_or(ErrorCode::IntegerOverflow)?
+                .checked_add(period.start_ts)
+                .ok_or(ErrorCode::IntegerOverflow)?;
+
+            if period_end_ts < now {
                 continue;
             }
 
@@ -702,7 +601,12 @@ impl Vesting {
                 break;
             }
 
-            let period_end_ts = period.end_ts()?;
+            let period_end_ts = period
+                .times
+                .checked_mul(period.interval_sec)
+                .ok_or(ErrorCode::IntegerOverflow)?
+                .checked_add(period.start_ts)
+                .ok_or(ErrorCode::IntegerOverflow)?;
             if period_end_ts <= user_details.last_claimed_at_ts {
                 sol_log("skip since we've already claimed");
                 continue;
@@ -710,7 +614,8 @@ impl Vesting {
 
             if period.airdropped {
                 sol_log("this period was airdropped");
-                total_percentage_to_add += period.token_percentage_as_decimal();
+                total_percentage_to_add +=
+                    Decimal::new(period.token_percentage as i64, DECIMALS + 2);
                 continue;
             }
 
@@ -739,9 +644,10 @@ impl Vesting {
                 intervals_passed,
             );
 
-            let percentage_for_intervals = (period.token_percentage_as_decimal()
-                / Decimal::from_u64(period.times).unwrap())
-                * Decimal::from_u64(intervals_passed).unwrap();
+            let percentage_for_intervals =
+                (Decimal::new(period.token_percentage as i64, DECIMALS + 2)
+                    / Decimal::from_u64(period.times).unwrap())
+                    * Decimal::from_u64(intervals_passed).unwrap();
 
             total_percentage_to_claim += percentage_for_intervals;
         }
@@ -763,23 +669,6 @@ impl ActualWallet {
     }
 }
 
-/// The existence of this account proofs user had a refund request.
-/// `can_get_refund` can be false though, because user could claim
-/// after that.
-#[account]
-pub struct RefundRequest {
-    // for easier search
-    distributor: Pubkey,
-    user: Pubkey,
-    active: bool,
-}
-
-impl RefundRequest {
-    pub fn space_required() -> usize {
-        8 + std::mem::size_of::<Self>()
-    }
-}
-
 #[account]
 #[derive(Debug)]
 pub struct MerkleDistributor {
@@ -788,10 +677,8 @@ pub struct MerkleDistributor {
     pub paused: bool,
     pub vault_bump: u8,
     pub vault: Pubkey,
-    pub refund_deadline_ts: Option<u64>,
-    // extra space for possible future extensions
-    pub extra: [u8; 16],
     pub vesting: Vesting,
+    pub refund_expiry: i64,
 }
 
 impl MerkleDistributor {
@@ -854,7 +741,6 @@ pub struct InitializeArgs {
     pub vault_bump: u8,
     pub merkle_root: [u8; 32],
     pub schedule: Vec<Period>,
-    pub refund_deadline_ts: Option<u64>,
 }
 
 #[derive(Accounts)]
@@ -901,7 +787,7 @@ pub struct Initialize2Args {
     pub vault_bump: u8,
     pub merkle_root: [u8; 32],
     pub periods_count: u64,
-    pub refund_deadline_ts: Option<u64>,
+    pub refund_expiry: i64,
 }
 
 #[derive(Accounts)]
@@ -1195,58 +1081,6 @@ pub struct ChangeWallet<'info> {
     system_program: Program<'info, System>,
 }
 
-#[derive(Accounts)]
-pub struct InitRefundRequest<'info> {
-    distributor: Account<'info, MerkleDistributor>,
-    #[account(mut)]
-    user: Signer<'info>,
-
-    #[account(
-        seeds = [
-            distributor.key().as_ref(),
-            distributor.merkle_index.to_be_bytes().as_ref(),
-            user.key().as_ref(),
-        ],
-        bump = user_details.bump,
-    )]
-    user_details: Account<'info, UserDetails>,
-
-    #[account(
-        init,
-        payer = user,
-        space = RefundRequest::space_required(),
-        seeds = [
-            distributor.key().as_ref(),
-            user.key().as_ref(),
-            "refund-request".as_ref(),
-        ],
-        bump,
-    )]
-    refund_request: Account<'info, RefundRequest>,
-
-    system_program: Program<'info, System>,
-}
-
-#[derive(Accounts)]
-pub struct CancelRefundRequest<'info> {
-    distributor: Account<'info, MerkleDistributor>,
-    #[account(mut)]
-    user: Signer<'info>,
-
-    #[account(
-        mut,
-        seeds = [
-            distributor.key().as_ref(),
-            user.key().as_ref(),
-            "refund-request".as_ref(),
-        ],
-        bump,
-    )]
-    refund_request: Account<'info, RefundRequest>,
-
-    system_program: Program<'info, System>,
-}
-
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct ClaimArgs {
     amount: u64,
@@ -1269,6 +1103,10 @@ pub struct Claim<'info> {
         bump = user_details.bump,
     )]
     user_details: Account<'info, UserDetails>,
+    //We are also refunding the PDA fee to the user. 
+    //Additionally, closing the request will remove it from RefundClaimRequest list
+    #[account(mut,seeds=[b"RefundClaimRequest",user.key().as_ref()],bump,close=user)]
+    pub refund_claim_request: Account<'info, RefundClaimRequest>,
 
     #[account(
         seeds = [
@@ -1283,19 +1121,6 @@ pub struct Claim<'info> {
             @ ErrorCode::WrongClaimer,
     )]
     actual_wallet: Account<'info, ActualWallet>,
-
-    /// CHECK: this is RefundRequest account but it can be non-initalized
-    /// checking in transaction
-    #[account(
-        mut,
-        seeds = [
-            distributor.key().as_ref(),
-            args.original_wallet.as_ref(),
-            "refund-request".as_ref(),
-        ],
-        bump,
-    )]
-    refund_request: AccountInfo<'info>,
 
     /// CHECK: PDA which is set as vault authority
     #[account(
@@ -1320,6 +1145,37 @@ pub struct Claim<'info> {
     clock: Sysvar<'info, Clock>,
 }
 
+#[account]
+pub struct AdminStats
+{
+    un_claimed_amount:u64,
+}
+
+#[derive(Accounts)]
+pub struct RequestRefundClaim<'info> {
+    #[account(
+        init,
+        seeds = [b"RefundClaimRequest",claimant.key().as_ref()],
+        bump,
+        space = size_of::<RefundClaimRequest>() + 16, //Additional length for discrimnator 
+        payer = claimant,
+    )]
+    pub refund_claim_request: Account<'info, RefundClaimRequest>,
+    #[account(mut)]
+    pub claimant: Signer<'info>,
+    pub system_program: Program<'info, System>
+}
+
+#[derive(Accounts)]
+pub struct RemoveRefundRequest<'info>{
+    #[account(mut,close=signer)]
+    pub refund_claim_request: Account<'info, RefundClaimRequest>,
+    #[account(init_if_needed,space = size_of::<AdminStats>() + 16,payer=signer)]
+    pub admin_stats:Account<'info,AdminStats>,
+    #[account(mut,constraint=Pubkey::from_str(ADMIN).unwrap()==signer.key())]
+    pub signer:Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
 struct TokenTransfer<'pay, 'info> {
     amount: u64,
     from: &'pay mut Account<'info, TokenAccount>,
