@@ -1,5 +1,7 @@
-use std::ops::DerefMut;
 
+use std::mem::size_of;
+use std::ops::DerefMut;
+use std::str::FromStr;
 use anchor_lang::{
     prelude::*,
     solana_program::{
@@ -41,6 +43,10 @@ pub enum ErrorCode {
     WrongClaimer,
     NotAllowedToChangeWallet,
     ScheduleStopped,
+    #[msg("Deadline expired!")]
+    DeadlineExpiredForRefund,
+    #[msg("Ensure the amount is above 0.")]
+    InvlaidAmount,
     InvalidSchedule,
     PeriodDurationIncreased,
     TokenPercentageIncreased,
@@ -74,6 +80,12 @@ pub struct TokensWithdrawn {
 #[program]
 pub mod claiming_factory {
     use anchor_lang::AccountsClose;
+    // Define Admin public key here
+    pub const ADMIN:&str="DatpvACGfVEt322aJvrNUM5gHo7z7L3jm3TgpADEW3Bg";
+    
+    // Time is in seconds
+    // To add limit of 1 hour, add 1 * 60 * 60
+    pub const REFUND_TIME_LIMIT:i64=3600;
 
     use super::*;
 
@@ -102,6 +114,7 @@ pub mod claiming_factory {
             extra: [0; 16],
             // schedule should pass validation first
             vesting: Vesting::new(args.schedule)?,
+            refund_expiry: 0,
         };
 
         Ok(())
@@ -421,7 +434,14 @@ pub mod claiming_factory {
         let vault = &mut ctx.accounts.vault;
         let distributor = &ctx.accounts.distributor;
         let user_details = &mut ctx.accounts.user_details;
+        let refund_claim_request=& mut ctx.accounts.refund_claim_request;
+
         let now = ctx.accounts.clock.unix_timestamp as u64;
+
+        if (refund_claim_request.time_stamp+REFUND_TIME_LIMIT)< now as i64
+        {
+            return err!(ErrorCode::DeadlineExpiredForRefund);
+        }
 
         require!(!distributor.paused, Paused);
         distributor.vesting.validate()?;
@@ -515,6 +535,22 @@ pub mod claiming_factory {
 
         Ok(())
     }
+    pub fn refund_claim_request(ctx:Context<RequestRefundClaim>,amount:u64)->Result<()>
+    {
+        let clock = Clock::get()?;
+        let request: &mut Account<'_, RefundClaimRequest> = &mut ctx.accounts.refund_claim_request;
+        request.amount=amount;
+        request.claimant = ctx.accounts.claimant.key(); 
+        request.time_stamp = clock.unix_timestamp as i64;
+        Ok(())
+    }
+    pub fn remove_refund(ctx:Context<RemoveRefundRequest>)->Result<()>
+    {
+        let admin_stats=&mut ctx.accounts.admin_stats;
+        admin_stats.un_claimed_amount=admin_stats.un_claimed_amount+ctx.accounts.refund_claim_request.amount;
+        msg!("removed by admin!");
+        Ok(())
+    }
 }
 
 fn check_proof(
@@ -523,7 +559,7 @@ fn check_proof(
     root: &[u8],
     proof: &[[u8; 32]],
 ) -> Result<()> {
-    let leaf = [&original_wallet.to_bytes()[..], &amount.to_be_bytes()];
+    let leaf: [&[u8]; 2] = [&original_wallet.to_bytes()[..], &amount.to_be_bytes()];
     let leaf = keccak::hashv(&leaf).0;
 
     let mut computed_hash = leaf;
@@ -565,6 +601,16 @@ pub struct UserDetails {
 impl UserDetails {
     pub const LEN: usize = 8 + std::mem::size_of::<Self>();
 }
+
+// We can also use 'UserDetails'.To avoid conflicts, we will continue to use 'RefundClaimRequest' as both have similar members.
+#[account]
+pub struct RefundClaimRequest {
+    claimant: Pubkey,
+    amount:u64,
+    time_stamp:i64,
+    //Additional parameters can be added here for other refund information.
+}
+
 
 const DECIMALS: u32 = 9;
 
@@ -792,6 +838,7 @@ pub struct MerkleDistributor {
     // extra space for possible future extensions
     pub extra: [u8; 16],
     pub vesting: Vesting,
+    pub refund_expiry: i64,
 }
 
 impl MerkleDistributor {
@@ -1269,6 +1316,10 @@ pub struct Claim<'info> {
         bump = user_details.bump,
     )]
     user_details: Account<'info, UserDetails>,
+    //We are also refunding the PDA fee to the user. 
+    //Additionally, closing the request will remove it from RefundClaimRequest list
+    #[account(mut,seeds=[b"RefundClaimRequest",user.key().as_ref()],bump,close=user)]
+    pub refund_claim_request: Account<'info, RefundClaimRequest>,
 
     #[account(
         seeds = [
@@ -1320,6 +1371,37 @@ pub struct Claim<'info> {
     clock: Sysvar<'info, Clock>,
 }
 
+#[account]
+pub struct AdminStats
+{
+    un_claimed_amount:u64,
+}
+
+#[derive(Accounts)]
+pub struct RequestRefundClaim<'info> {
+    #[account(
+        init,
+        seeds = [b"RefundClaimRequest",claimant.key().as_ref()],
+        bump,
+        space = size_of::<RefundClaimRequest>() + 16, //Additional length for discrimnator 
+        payer = claimant,
+    )]
+    pub refund_claim_request: Account<'info, RefundClaimRequest>,
+    #[account(mut)]
+    pub claimant: Signer<'info>,
+    pub system_program: Program<'info, System>
+}
+
+#[derive(Accounts)]
+pub struct RemoveRefundRequest<'info>{
+    #[account(mut,close=signer)]
+    pub refund_claim_request: Account<'info, RefundClaimRequest>,
+    #[account(init_if_needed,space = size_of::<AdminStats>() + 16,payer=signer)]
+    pub admin_stats:Account<'info,AdminStats>,
+    #[account(mut,constraint=Pubkey::from_str(ADMIN).unwrap()==signer.key())]
+    pub signer:Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
 struct TokenTransfer<'pay, 'info> {
     amount: u64,
     from: &'pay mut Account<'info, TokenAccount>,

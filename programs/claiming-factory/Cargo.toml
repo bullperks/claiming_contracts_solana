@@ -16,6 +16,6 @@ no-idl = []
 local = []
 
 [dependencies]
-anchor-lang = "0.24"
+anchor-lang = {version = "0.24.0", features = ["init-if-needed"]}
 anchor-spl = "0.24"
 rust_decimal = "1.24"
