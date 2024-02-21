@@ -127,8 +127,11 @@ fn main() -> Result<()> {
         .map_err(|err| anyhow!("failed to read keypair: {}", err))?;
     let payer = Rc::new(payer);
 
-    let client =
-        Client::new_with_options(opts.cluster, payer.clone(), CommitmentConfig::processed());
+    let client = Client::new_with_options(
+        opts.cluster.clone(),
+        payer.clone(),
+        CommitmentConfig::processed(),
+    );
     let client = client.program(opts.program_id);
 
     match opts.cmd {
@@ -146,7 +149,7 @@ fn main() -> Result<()> {
                 .args(claiming_factory::instruction::InitializeConfig { bump })
                 .signer(payer.as_ref());
 
-            let rpc_client = RpcClient::new("https://api.mainnet-beta.solana.com");
+            let rpc_client = RpcClient::new(opts.cluster.url());
 
             let instructions = req.instructions()?;
             let tx = {
