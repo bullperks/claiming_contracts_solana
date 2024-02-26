@@ -45,6 +45,7 @@ pub enum ErrorCode {
     PeriodDurationIncreased,
     TokenPercentageIncreased,
     RefundRequested,
+    RefundRequestedButNotProcessed,
     RefundDeadlineIsOver,
 }
 
@@ -427,6 +428,9 @@ pub mod claiming_factory {
         distributor.vesting.validate()?;
         require!(user_details.claimed_amount < args.amount, AlreadyClaimed);
 
+        let refund_request = &ctx.accounts.refund_request;
+        require!(!refund_request.active, ErrorCode::RefundRequestedButNotProcessed);
+
         let mut refund_request = None;
         if let Some(refund_deadline_ts) = distributor.refund_deadline_ts {
             match Account::<RefundRequest>::try_from(&ctx.accounts.refund_request) {
@@ -515,6 +519,23 @@ pub mod claiming_factory {
 
         Ok(())
     }
+
+
+    pub fn request_refund(ctx: Context<RequestRefund>) -> Result<()> {
+        let clock: Clock = Clock::get()?;
+        let refund_request = &mut ctx.accounts.refund_request;
+        let user_details = &ctx.accounts.user_details;
+
+        require!(user_details.claimed_amount == 0, ErrorCode::AlreadyClaimed);
+        require!(clock.unix_timestamp <= ctx.accounts.distributor.refund_deadline_ts.unwrap(), ErrorCode::RefundDeadlineIsOver);
+
+        refund_request.active = true;
+
+        Ok(())
+    }
+
+
+
 }
 
 fn check_proof(
@@ -763,9 +784,6 @@ impl ActualWallet {
     }
 }
 
-/// The existence of this account proofs user had a refund request.
-/// `can_get_refund` can be false though, because user could claim
-/// after that.
 #[account]
 pub struct RefundRequest {
     // for easier search
@@ -1197,20 +1215,10 @@ pub struct ChangeWallet<'info> {
 
 #[derive(Accounts)]
 pub struct InitRefundRequest<'info> {
+    #[account(mut)]
     distributor: Account<'info, MerkleDistributor>,
     #[account(mut)]
     user: Signer<'info>,
-
-    #[account(
-        seeds = [
-            distributor.key().as_ref(),
-            distributor.merkle_index.to_be_bytes().as_ref(),
-            user.key().as_ref(),
-        ],
-        bump = user_details.bump,
-    )]
-    user_details: Account<'info, UserDetails>,
-
     #[account(
         init,
         payer = user,
@@ -1223,10 +1231,6 @@ pub struct InitRefundRequest<'info> {
         bump,
     )]
     refund_request: Account<'info, RefundRequest>,
-
-    system_program: Program<'info, System>,
-}
-
 #[derive(Accounts)]
 pub struct CancelRefundRequest<'info> {
     distributor: Account<'info, MerkleDistributor>,
