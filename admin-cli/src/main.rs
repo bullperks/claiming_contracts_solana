@@ -118,6 +118,16 @@ enum Command {
         #[structopt(long)]
         user: Pubkey,
     },
+    SetRefundDeadline {
+        #[structopt(long)]
+        distributor: Pubkey,
+        #[structopt(long)]
+        deadline: u64,
+    },
+    ViewRefundRequests {
+        #[structopt(long)]
+        distributor: Pubkey,
+    }
 }
 
 fn main() -> Result<()> {
@@ -335,6 +345,55 @@ fn main() -> Result<()> {
                 client.account(user_details)?;
             println!("{:#?}", user_details_account);
         }
+
+        Command::SetRefundDeadline { distributor, deadline } => {
+            let r = client
+                .request()
+                .accounts(claiming_factory::accounts::SetRefundDeadline {
+                    distributor,
+                    owner: payer.pubkey(),
+                })
+                .args(claiming_factory::instruction::SetRefundDeadline { deadline })
+                .signer(payer.as_ref())
+                .send()?;
+
+            println!("Refund deadline set successfully. Result:\n{}", r);
+        },
+        Command::ViewRefundRequests { distributor } => {
+            let client = RpcClient::new_with_commitment(opts.cluster.url(), CommitmentConfig::confirmed());
+    
+            let discriminator = RefundRequest::discriminator(); 
+            let distributor_bytes = distributor.to_bytes();
+            let mut data_slice = discriminator.to_vec();
+            data_slice.extend_from_slice(&distributor_bytes);
+
+            let filters = vec![
+                RpcFilterType::Memcmp(Memcmp {
+                    offset: 0,
+                    bytes: MemcmpEncodedBytes::Base58(bs58::encode(data_slice).into_string()),
+                    encoding: None,
+                }),
+            ];
+
+            let accounts = client.get_program_accounts_with_config(
+                &opts.program_id,
+                RpcProgramAccountsConfig {
+                    filters: Some(filters),
+                    account_config: RpcAccountInfoConfig {
+                        encoding: Some(UiAccountEncoding::Base64),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+            )?;
+
+            for (pubkey, account) in accounts {
+                let refund_request: RefundRequest = try_from_slice_unchecked(&account.data)?;
+                if refund_request.active {
+                    println!("Active Refund Request: User {}, Pubkey: {}", refund_request.user, pubkey);
+                }
+            }
+    },
     }
 
     Ok(())

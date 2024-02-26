@@ -1134,5 +1134,56 @@ describe('claiming-factory', () => {
         assert.strictEqual(targetWalletAccount.amount.toNumber(), 800);
       });
     });
+
+    context("refund functionality", async function() {
+      beforeEach(async function() {
+        // Setup the distributor with a refund deadline in the near future.
+        const refundDeadline = Math.floor(Date.now() / 1000) + 60; // 60 seconds from now
+        this.distributor = await setupDistributorWithRefundDeadline(refundDeadline);
+      });
+
+      it("should allow refund request before deadline", async function() {
+        const { distributor } = this;
+        const user = claimingUsers[0];
+        await assert.doesNotReject(async () => {
+          await userClient.requestRefund(distributor, user.wallet.publicKey);
+        });
+      });
+
+      it("should not allow refund request after deadline", async function() {
+        const { distributor } = this;
+        const user = claimingUsers[1];
+        // Simulate waiting past the refund deadline
+        await new Promise(resolve => setTimeout(resolve, 61000)); // Wait 61 seconds
+        await assert.rejects(async () => {
+          await userClient.requestRefund(distributor, user.wallet.publicKey);
+        }, (err) => {
+          assert.equal(err.code, ErrorCode.RefundDeadlineIsOver);
+          return true;
+        });
+      });
+
+      it("should not allow refund request after claiming", async function() {
+        const { distributor } = this;
+        const user = claimingUsers[2];
+        // Simulate claiming tokens
+        await claim(distributor, user, 1000); // Assuming claim function and amount
+        await assert.rejects(async () => {
+          await userClient.requestRefund(distributor, user.wallet.publicKey);
+        }, (err) => {
+          assert.equal(err.code, ErrorCode.AlreadyClaimed);
+          return true;
+        });
+      });
+
+      it("should deactivate refund request on cancel", async function() {
+        const { distributor } = this;
+        const user = claimingUsers[3];
+        await userClient.requestRefund(distributor, user.wallet.publicKey);
+        await assert.doesNotReject(async () => {
+          await userClient.cancelRefundRequest(distributor, user.wallet.publicKey);
+        });
+      });
+    });
   });
 });
