@@ -427,30 +427,6 @@ pub mod claiming_factory {
         distributor.vesting.validate()?;
         require!(user_details.claimed_amount < args.amount, AlreadyClaimed);
 
-        let mut refund_request = None;
-        if let Some(refund_deadline_ts) = distributor.refund_deadline_ts {
-            match Account::<RefundRequest>::try_from(&ctx.accounts.refund_request) {
-                Ok(refund_request_account) => {
-                    // refund request exists, now should check refund deadline
-                    if now > refund_deadline_ts && refund_request_account.active {
-                        // refund deadline is over, didn't claim before, so can't claim anymore
-                        return Err(ErrorCode::RefundRequested.into());
-                    }
-
-                    refund_request = Some(refund_request_account);
-                }
-                Err(Error::AnchorError(e))
-                    if e.error_code_number
-                        == anchor_lang::error::ErrorCode::AccountNotInitialized.into() =>
-                {
-                    // refund request doesn't exist, proceed
-                }
-                Err(err) => {
-                    return Err(err);
-                }
-            }
-        }
-
         check_proof(
             &args.original_wallet,
             args.amount,
@@ -471,10 +447,42 @@ pub mod claiming_factory {
             .to_u64()
             .unwrap();
 
-        if amount == 0 && distributor.vesting.has_stopped(now)? {
-            return Err(ErrorCode::ScheduleStopped.into());
-        } else if amount == 0 {
-            return Err(ErrorCode::NothingToClaim.into());
+        if amount == 0 {
+            let err_code = if distributor.vesting.has_stopped(now)? {
+                ErrorCode::ScheduleStopped
+            } else {
+                ErrorCode::NothingToClaim
+            };
+
+            return Err(err_code.into());
+        }
+
+        if let Some(refund_deadline_ts) = distributor.refund_deadline_ts {
+            sol_log("checking refund request...");
+            match Account::<RefundRequest>::try_from(&ctx.accounts.refund_request) {
+                Ok(mut refund_request_account) => {
+                    // refund request exists, now should check refund deadline
+                    if now > refund_deadline_ts && refund_request_account.active {
+                        // refund deadline is over, didn't claim before, so can't claim anymore
+                        return Err(ErrorCode::RefundRequested.into());
+                    }
+
+                    refund_request_account.active = false;
+                    sol_log("refund request cancelled");
+
+                    refund_request_account.exit(ctx.program_id)?;
+                }
+                Err(Error::AnchorError(e))
+                    if e.error_code_number
+                        == anchor_lang::error::ErrorCode::AccountNotInitialized.into() =>
+                {
+                    // refund request doesn't exist, proceed
+                    sol_log("refund request doesn't exist");
+                }
+                Err(err) => {
+                    return Err(err);
+                }
+            }
         }
 
         let distributor_key = distributor.key();
@@ -501,10 +509,6 @@ pub mod claiming_factory {
             .ok_or(ErrorCode::IntegerOverflow)?;
 
         user_details.last_claimed_at_ts = ctx.accounts.clock.unix_timestamp as u64;
-
-        if let Some(mut refund_request) = refund_request {
-            refund_request.active = false;
-        }
 
         emit!(Claimed {
             merkle_index: distributor.merkle_index,
@@ -764,9 +768,10 @@ impl ActualWallet {
 }
 
 /// The existence of this account proofs user had a refund request.
-/// `can_get_refund` can be false though, because user could claim
+/// `active` can be false though, because user could claim
 /// after that.
 #[account]
+#[derive(Debug)]
 pub struct RefundRequest {
     // for easier search
     distributor: Pubkey,

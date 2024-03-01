@@ -118,6 +118,12 @@ enum Command {
         #[structopt(long)]
         user: Pubkey,
     },
+    ShowRefundRequest {
+        #[structopt(long)]
+        claiming: Pubkey,
+        #[structopt(long)]
+        user: Pubkey,
+    },
 }
 
 fn main() -> Result<()> {
@@ -334,6 +340,15 @@ fn main() -> Result<()> {
             let user_details_account: claiming_factory::UserDetails =
                 client.account(user_details)?;
             println!("{:#?}", user_details_account);
+        }
+        Command::ShowRefundRequest { claiming, user } => {
+            let (refund_request, _bump) = Pubkey::find_program_address(
+                &[claiming.as_ref(), user.as_ref(), "refund-request".as_ref()],
+                &client.id(),
+            );
+            let refund_request_account: claiming_factory::RefundRequest =
+                client.account(refund_request)?;
+            println!("{:#?}", refund_request_account);
         }
     }
 
